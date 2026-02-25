@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { X, ArrowLeft, Calendar, Clock, ExternalLink, Shield, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight, Wrench, Code, Lightbulb, FileText, Link, Layers, Zap, Target, Skull, Users } from 'lucide-react';
 import { matchVulnToSubProducts } from '../../data/assets';
 import StatusBadge from '../Lifecycle/StatusBadge';
@@ -11,6 +11,12 @@ const AlertsList = ({ asset, vulnerabilities = [], isOpen, onClose, isAuthentica
     const [expandedSections, setExpandedSections] = useState({});
     const [expandedProductSections, setExpandedProductSections] = useState({});
     const [statusFilter, setStatusFilter] = useState('all');
+    const [criticalityFilter, setCriticalityFilter] = useState('all');
+
+    // Reset criticality filter when switching to a different asset
+    useEffect(() => {
+        setCriticalityFilter('all');
+    }, [asset?.name]);
 
     // Group vulnerabilities by sub-product type (e.g., "Software", "Switch", "Storage")
     const groupedVulnerabilities = useMemo(() => {
@@ -354,14 +360,32 @@ const AlertsList = ({ asset, vulnerabilities = [], isOpen, onClose, isAuthentica
         };
     };
 
-    // Filter vulnerabilities by status
-    const filteredVulnerabilities = useMemo(() => {
+    // Step 1: filter by status
+    const statusFilteredVulns = useMemo(() => {
         if (statusFilter === 'all') return vulnerabilities;
         return vulnerabilities.filter(v => {
             const status = vulnStatuses[v.id]?.status || 'new';
             return status === statusFilter;
         });
     }, [vulnerabilities, statusFilter, vulnStatuses]);
+
+    // Counts per severity level (based on status-filtered set, so buttons respond to status filter)
+    const severityCounts = useMemo(() => {
+        const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+        statusFilteredVulns.forEach(v => {
+            const sev = v.severity?.toLowerCase();
+            if (sev && Object.prototype.hasOwnProperty.call(counts, sev)) counts[sev]++;
+        });
+        return counts;
+    }, [statusFilteredVulns]);
+
+    // Step 2: filter by criticality
+    const filteredVulnerabilities = useMemo(() => {
+        if (criticalityFilter === 'all') return statusFilteredVulns;
+        return statusFilteredVulns.filter(v =>
+            (v.severity?.toLowerCase() || '') === criticalityFilter
+        );
+    }, [statusFilteredVulns, criticalityFilter]);
 
     // Helper function to render a vulnerability card (used by both grouped and flat views)
     const renderVulnerabilityCard = (vuln, refs, hasExploits, hasRemediation, dueDateUrgency, pocSummary, remediationSummary, allRefs) => (
@@ -736,7 +760,8 @@ const AlertsList = ({ asset, vulnerabilities = [], isOpen, onClose, isAuthentica
                             <h2 className="alerts-panel-title">{asset?.name || 'Vulnerabilities'}</h2>
                             <p className="alerts-panel-subtitle">
                                 {filteredVulnerabilities.length} of {vulnerabilities.length} {vulnerabilities.length === 1 ? 'vulnerability' : 'vulnerabilities'}
-                                {statusFilter !== 'all' && ` (${statusFilter.replace('_', ' ')})`}
+                                {statusFilter !== 'all' && ` · ${statusFilter.replace('_', ' ')}`}
+                                {criticalityFilter !== 'all' && ` · ${criticalityFilter.charAt(0).toUpperCase() + criticalityFilter.slice(1)} only`}
                             </p>
                         </div>
                     </div>
@@ -764,18 +789,47 @@ const AlertsList = ({ asset, vulnerabilities = [], isOpen, onClose, isAuthentica
                     </div>
                 </div>
 
+                {/* Criticality Filter Bar */}
+                <div className="criticality-filter-bar">
+                    <button
+                        className={`criticality-filter-btn ${criticalityFilter === 'all' ? 'active' : ''}`}
+                        onClick={() => setCriticalityFilter('all')}
+                    >
+                        All
+                        <span className="criticality-filter-count">{statusFilteredVulns.length}</span>
+                    </button>
+                    {[
+                        { key: 'critical', label: 'Critical' },
+                        { key: 'high', label: 'High' },
+                        { key: 'medium', label: 'Medium' },
+                        { key: 'low', label: 'Low' },
+                    ].map(({ key, label }) => (
+                        <button
+                            key={key}
+                            className={`criticality-filter-btn ${key} ${criticalityFilter === key ? 'active' : ''} ${severityCounts[key] === 0 ? 'empty' : ''}`}
+                            onClick={() => setCriticalityFilter(key)}
+                            disabled={severityCounts[key] === 0}
+                        >
+                            {label}
+                            <span className="criticality-filter-count">{severityCounts[key]}</span>
+                        </button>
+                    ))}
+                </div>
+
                 <div className="alerts-list">
                     {filteredVulnerabilities.length === 0 ? (
                         <div className="alerts-empty">
                             <CheckCircle2 />
                             <h3 className="alerts-empty-title">No vulnerabilities</h3>
                             <p className="alerts-empty-text">
-                                {vulnerabilities.length > 0 && statusFilter !== 'all'
+                                {criticalityFilter !== 'all'
+                                    ? `No ${criticalityFilter} severity vulnerabilities found.`
+                                    : vulnerabilities.length > 0 && statusFilter !== 'all'
                                     ? 'No vulnerabilities match the selected status filter.'
                                     : 'No known vulnerabilities found for this asset in the selected time range.'}
                             </p>
                         </div>
-                    ) : groupedVulnerabilities && statusFilter === 'all' ? (
+                    ) : groupedVulnerabilities && statusFilter === 'all' && criticalityFilter === 'all' ? (
                         /* Grouped display by product/software type */
                         groupedVulnerabilities.map(group => (
                             <div key={group.type} className="product-section">

@@ -1,8 +1,8 @@
-// Authentication service — Redis-backed user management and JWT tokens
+// Authentication service — PostgreSQL-backed user management and JWT tokens
 
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { redis } from './redis.js';
+import pool from './db.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'heimdall-dev-secret-change-me';
 const ACCESS_TOKEN_EXPIRY = '15m';
@@ -13,24 +13,20 @@ const REFRESH_TOKEN_EXPIRY_SECONDS = 7 * 24 * 60 * 60; // 7 days
  */
 export async function createUser(email, password) {
     const normalizedEmail = email.toLowerCase().trim();
-
-    // Check if user already exists
-    const existing = await redis.get(`user:${normalizedEmail}`);
-    if (existing) {
-        throw new Error('User already exists');
-    }
-
     const passwordHash = await bcrypt.hash(password, 12);
 
-    const user = {
-        email: normalizedEmail,
-        passwordHash,
-        createdAt: new Date().toISOString()
-    };
-
-    await redis.set(`user:${normalizedEmail}`, user);
-
-    return { email: normalizedEmail, createdAt: user.createdAt };
+    try {
+        const { rows } = await pool.query(
+            `INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING email, created_at`,
+            [normalizedEmail, passwordHash]
+        );
+        return { email: rows[0].email, createdAt: rows[0].created_at.toISOString() };
+    } catch (err) {
+        if (err.code === '23505') { // unique_violation
+            throw new Error('User already exists');
+        }
+        throw err;
+    }
 }
 
 /**
@@ -38,18 +34,22 @@ export async function createUser(email, password) {
  */
 export async function validatePassword(email, password) {
     const normalizedEmail = email.toLowerCase().trim();
-    const user = await redis.get(`user:${normalizedEmail}`);
+    const { rows } = await pool.query(
+        `SELECT email, password_hash, created_at FROM users WHERE email = $1`,
+        [normalizedEmail]
+    );
 
-    if (!user) {
+    if (rows.length === 0) {
         throw new Error('Invalid credentials');
     }
 
-    const isValid = await bcrypt.compare(password, user.passwordHash);
+    const user = rows[0];
+    const isValid = await bcrypt.compare(password, user.password_hash);
     if (!isValid) {
         throw new Error('Invalid credentials');
     }
 
-    return { email: user.email, createdAt: user.createdAt };
+    return { email: user.email, createdAt: user.created_at.toISOString() };
 }
 
 /**
@@ -102,13 +102,13 @@ export function verifyRefreshToken(token) {
 }
 
 /**
- * Store refresh token in Redis (for revocation tracking)
+ * Store refresh token in database (for revocation tracking)
  */
 export async function storeRefreshToken(refreshToken, email) {
-    await redis.set(
-        `user:session:${refreshToken}`,
-        email,
-        { ex: REFRESH_TOKEN_EXPIRY_SECONDS }
+    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_SECONDS * 1000);
+    await pool.query(
+        `INSERT INTO sessions (refresh_token, email, expires_at) VALUES ($1, $2, $3)`,
+        [refreshToken, email, expiresAt]
     );
 }
 
@@ -116,15 +116,21 @@ export async function storeRefreshToken(refreshToken, email) {
  * Check if a refresh token is still valid (not revoked)
  */
 export async function isRefreshTokenValid(refreshToken) {
-    const email = await redis.get(`user:session:${refreshToken}`);
-    return email || null;
+    const { rows } = await pool.query(
+        `SELECT email FROM sessions WHERE refresh_token = $1 AND expires_at > NOW()`,
+        [refreshToken]
+    );
+    return rows.length ? rows[0].email : null;
 }
 
 /**
  * Revoke a refresh token
  */
 export async function revokeRefreshToken(refreshToken) {
-    await redis.del(`user:session:${refreshToken}`);
+    await pool.query(
+        `DELETE FROM sessions WHERE refresh_token = $1`,
+        [refreshToken]
+    );
 }
 
 /**
@@ -132,7 +138,10 @@ export async function revokeRefreshToken(refreshToken) {
  */
 export async function getUser(email) {
     const normalizedEmail = email.toLowerCase().trim();
-    const user = await redis.get(`user:${normalizedEmail}`);
-    if (!user) return null;
-    return { email: user.email, createdAt: user.createdAt };
+    const { rows } = await pool.query(
+        `SELECT email, created_at FROM users WHERE email = $1`,
+        [normalizedEmail]
+    );
+    if (rows.length === 0) return null;
+    return { email: rows[0].email, createdAt: rows[0].created_at.toISOString() };
 }

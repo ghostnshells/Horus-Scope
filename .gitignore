@@ -27,3 +27,5 @@ Thumbs.db
 # Vulnerability cache (contains fetched data)
 server/cache/
 *.cache.json
+.vercel
+.env*.local

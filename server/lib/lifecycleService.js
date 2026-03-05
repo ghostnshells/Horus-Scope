@@ -1,6 +1,6 @@
-// Vulnerability Lifecycle Service — Redis-backed status tracking, audit trail, and SLA management
+// Vulnerability Lifecycle Service — PostgreSQL-backed status tracking, audit trail, and SLA management
 
-import { redis } from './redis.js';
+import pool from './db.js';
 
 // Valid vulnerability lifecycle statuses
 export const STATUSES = ['new', 'acknowledged', 'in_progress', 'patched', 'mitigated', 'accepted_risk', 'false_positive'];
@@ -12,8 +12,18 @@ const DEFAULT_SLA = { critical: 7, high: 30, medium: 90, low: 180 };
  * Get vulnerability status for a user
  */
 export async function getVulnStatus(userId, cveId) {
-    const data = await redis.get(`vuln:status:${userId}:${cveId}`);
-    return data || { status: 'new', updatedAt: null, notes: '' };
+    const { rows } = await pool.query(
+        `SELECT status, notes, updated_at FROM vuln_status WHERE user_id = $1 AND cve_id = $2`,
+        [userId, cveId]
+    );
+    if (rows.length === 0) {
+        return { status: 'new', updatedAt: null, notes: '' };
+    }
+    return {
+        status: rows[0].status,
+        updatedAt: rows[0].updated_at.toISOString(),
+        notes: rows[0].notes || ''
+    };
 }
 
 /**
@@ -24,48 +34,61 @@ export async function setVulnStatus(userId, cveId, status, notes = '') {
         throw new Error(`Invalid status: ${status}. Must be one of: ${STATUSES.join(', ')}`);
     }
 
-    const now = new Date().toISOString();
+    const now = new Date();
     const previous = await getVulnStatus(userId, cveId);
 
-    // Update current status
-    const statusData = { status, updatedAt: now, notes };
-    await redis.set(`vuln:status:${userId}:${cveId}`, statusData);
+    // Upsert current status
+    await pool.query(
+        `INSERT INTO vuln_status (user_id, cve_id, status, notes, updated_at)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (user_id, cve_id) DO UPDATE SET status = $3, notes = $4, updated_at = $5`,
+        [userId, cveId, status, notes, now]
+    );
 
     // Add audit trail entry
-    const auditEntry = JSON.stringify({
-        from: previous.status,
-        to: status,
-        notes,
-        timestamp: now
-    });
-    await redis.zadd(`vuln:audit:${userId}:${cveId}`, {
-        score: Date.now(),
-        member: auditEntry
-    });
+    await pool.query(
+        `INSERT INTO audit_trail (user_id, cve_id, from_status, to_status, notes, timestamp)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [userId, cveId, previous.status, status, notes, now]
+    );
 
-    return statusData;
+    return { status, updatedAt: now.toISOString(), notes };
 }
 
 /**
  * Get audit trail for a vulnerability
  */
 export async function getAuditTrail(userId, cveId) {
-    const entries = await redis.zrange(`vuln:audit:${userId}:${cveId}`, 0, -1);
-    return (entries || []).map(entry => {
-        try {
-            return JSON.parse(entry);
-        } catch {
-            return null;
-        }
-    }).filter(Boolean);
+    const { rows } = await pool.query(
+        `SELECT from_status, to_status, notes, timestamp
+         FROM audit_trail
+         WHERE user_id = $1 AND cve_id = $2
+         ORDER BY timestamp ASC`,
+        [userId, cveId]
+    );
+    return rows.map(r => ({
+        from: r.from_status,
+        to: r.to_status,
+        notes: r.notes || '',
+        timestamp: r.timestamp.toISOString()
+    }));
 }
 
 /**
  * Get SLA configuration for a user
  */
 export async function getSLAConfig(userId) {
-    const config = await redis.get(`sla:config:${userId}`);
-    return config || DEFAULT_SLA;
+    const { rows } = await pool.query(
+        `SELECT critical, high, medium, low FROM sla_config WHERE user_id = $1`,
+        [userId]
+    );
+    if (rows.length === 0) return { ...DEFAULT_SLA };
+    return {
+        critical: rows[0].critical,
+        high: rows[0].high,
+        medium: rows[0].medium,
+        low: rows[0].low
+    };
 }
 
 /**
@@ -78,7 +101,12 @@ export async function setSLAConfig(userId, config) {
         medium: config.medium ?? DEFAULT_SLA.medium,
         low: config.low ?? DEFAULT_SLA.low
     };
-    await redis.set(`sla:config:${userId}`, sla);
+    await pool.query(
+        `INSERT INTO sla_config (user_id, critical, high, medium, low)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (user_id) DO UPDATE SET critical = $2, high = $3, medium = $4, low = $5`,
+        [userId, sla.critical, sla.high, sla.medium, sla.low]
+    );
     return sla;
 }
 
@@ -99,7 +127,6 @@ export function calculateSLADeadline(publishedDate, severity, slaConfig) {
  * Check if SLA is breached
  */
 export function isSLABreached(publishedDate, severity, status, slaConfig) {
-    // Terminal statuses are never breached
     const terminalStatuses = ['patched', 'mitigated', 'accepted_risk', 'false_positive'];
     if (terminalStatuses.includes(status)) return false;
 
@@ -117,15 +144,32 @@ export function getSLADaysRemaining(publishedDate, severity, slaConfig) {
 }
 
 /**
- * Bulk get statuses for multiple CVEs
+ * Bulk get statuses for multiple CVEs (single query)
  */
 export async function getBulkStatuses(userId, cveIds) {
     const results = {};
-    // Use pipeline for efficiency
-    for (const cveId of cveIds) {
-        const data = await redis.get(`vuln:status:${userId}:${cveId}`);
-        results[cveId] = data || { status: 'new', updatedAt: null, notes: '' };
+    // Initialise all as 'new'
+    for (const id of cveIds) {
+        results[id] = { status: 'new', updatedAt: null, notes: '' };
     }
+
+    if (cveIds.length === 0) return results;
+
+    const { rows } = await pool.query(
+        `SELECT cve_id, status, notes, updated_at
+         FROM vuln_status
+         WHERE user_id = $1 AND cve_id = ANY($2)`,
+        [userId, cveIds]
+    );
+
+    for (const r of rows) {
+        results[r.cve_id] = {
+            status: r.status,
+            updatedAt: r.updated_at.toISOString(),
+            notes: r.notes || ''
+        };
+    }
+
     return results;
 }
 

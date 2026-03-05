@@ -1,0 +1,137 @@
+Heimdall Feature Roadmap
+========================
+
+Current Feature Set
+-------------------
+1. Vulnerability Dashboard — CVE monitoring across 26 assets via NVD/CISA KEV, category + vendor views
+2. The Pulse — Cloud provider status (AWS, GCP, Azure, M365) with incident feed
+3. News Feed — Security news sidebar
+4. Auth — Login/signup
+5. Lifecycle (partial) — Status badges, SLA indicators, audit trail components exist but aren't fully wired up
+
+
+Tier 1 — Core Differentiators (build these first)
+==================================================
+
+1. Threat Intel Digest
+----------------------
+A daily/weekly auto-generated briefing combining vuln data + news + cloud incidents into one actionable
+summary. Security teams spend 30-60 min every morning doing this manually. Show "X new criticals
+affecting your stack, Y cloud incidents, Z trending exploits." This is the feature that makes people
+open Heimdall every day.
+
+2. Custom Asset Watchlists
+--------------------------
+Let users define their own asset stack instead of the fixed 26. "I run Nginx, PostgreSQL, Ubuntu,
+Grafana" — show me only what matters. This is table stakes for a paid product because every org's
+stack is different. Store per-user in the auth system.
+
+3. Alerting & Notifications
+----------------------------
+Email/Slack/webhook alerts when: a critical CVE hits your watchlist, a cloud provider you use has an
+outage, a CISA KEV entry matches your stack. Without alerts, users have to remember to check the
+dashboard. Alerts convert passive users to dependent users.
+
+4. EPSS & Exploit Intelligence
+-------------------------------
+Overlay EPSS (Exploit Prediction Scoring System) scores on every CVE. Show "probability of exploitation
+in the next 30 days" alongside CVSS. Cross-reference with CISA KEV "known exploited" flag. Add links
+to public PoCs from GitHub/ExploitDB. This turns raw CVE data into *prioritized* action items — the #1
+pain point for security teams drowning in vulns.
+
+
+Tier 2 — Competitive Moat Features
+===================================
+
+5. Vulnerability Lifecycle Management (finish what's started)
+-------------------------------------------------------------
+Wire up StatusBadge, SLAIndicator, AuditTrail fully. Let authenticated users mark CVEs as:
+New → Investigating → Mitigated → Accepted Risk → Resolved. Add SLA timers (e.g., "Critical: 48hr
+remediation"). Export audit trail for compliance. This turns Heimdall from a read-only dashboard into
+a workflow tool teams rely on daily.
+
+6. Compliance Mapping
+---------------------
+Tag CVEs with relevant frameworks: NIST 800-53, CIS Controls, PCI-DSS, SOC 2, ISO 27001. "This CVE
+affects PCI-DSS requirement 6.2." Most small/mid security teams can't afford tools like Tenable or
+Qualys that do this. Even a basic mapping is extremely valuable for audit prep.
+
+7. Pulse Expansion — Beyond Cloud Status
+-----------------------------------------
+- DNS/CDN status: Cloudflare, Akamai, Fastly
+- Identity providers: Okta, Entra ID, Auth0 (outages here are catastrophic)
+- SaaS dependencies: GitHub, Slack, Jira, Salesforce
+- ISP/backbone: Level3, Cogent, major peering points
+- Rename from "Cloud Infrastructure" to "Service Dependency Monitor" — track everything your org
+  depends on
+
+8. Risk Score per Asset
+-----------------------
+Compute a composite risk score combining: number of open vulns, severity distribution, EPSS scores,
+CISA KEV presence, time-since-disclosure, exploit availability. Show a single "risk heat" number per
+asset card. Executives love one number. Analysts love the breakdown.
+
+
+Tier 3 — Premium / Team Features (subscription justifiers)
+===========================================================
+
+9. Team Workspaces
+------------------
+Multiple users in one org. Shared watchlists, shared vuln statuses, role-based access. Assignment
+("Umar — investigate CVE-2026-XXXX"). This is what separates a $0 tool from a $29/seat/month tool.
+
+10. Reporting & Export
+----------------------
+PDF/CSV export of: weekly vuln summary, asset risk posture, SLA compliance, remediation velocity.
+Scheduled email reports. Security teams need to report to management monthly. If Heimdall generates
+that report, it's indispensable.
+
+11. API Access
+--------------
+REST API for integrations. Let teams pull Heimdall data into their SIEM, ticketing systems
+(Jira/ServiceNow), or runbooks. API access is a classic premium tier gate.
+
+12. Vendor Advisory Aggregation
+-------------------------------
+Pull advisories from all major vendors (Fortinet, Palo Alto, VMware, Ivanti, etc.) and map them to
+the asset watchlist. Show "Vendor says patch available" alongside the CVE. Many CVEs are months old
+before NVD publishes — vendor advisories are often faster. Services for MSRC, Cisco, Mozilla already
+exist — expand coverage.
+
+
+Suggested Pricing Tiers
+========================
+
+Free:
+  - Vuln dashboard (fixed assets)
+  - The Pulse (cloud status)
+  - News feed
+  - Custom watchlists: 5 assets
+
+Pro ($15/mo):
+  - Everything in Free
+  - Unlimited custom watchlists
+  - Email + Slack alerting
+  - EPSS + exploit intel
+  - Lifecycle management
+  - Basic reports & export
+
+Team ($29/seat/mo):
+  - Everything in Pro
+  - Email + Slack + Webhook alerting
+  - Compliance mapping
+  - Team workspaces
+  - Full reports + scheduled delivery
+  - API access
+
+
+Recommended Build Sequence
+==========================
+1. Custom watchlists — unlocks personalization, makes everything else more valuable
+2. EPSS overlay — quick win, free data source (FIRST.org), massive value-add
+3. Alerting — converts users from "checks occasionally" to "depends on daily"
+4. Finish lifecycle management — components already exist, just needs wiring
+5. Threat intel digest — the "daily briefing" that makes Heimdall the first tab opened
+
+The free tier with the fixed 26 assets + Pulse acts as the funnel.
+Customization and workflow are what people pay for.

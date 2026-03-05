@@ -12,10 +12,12 @@ const AlertsList = ({ asset, vulnerabilities = [], isOpen, onClose, isAuthentica
     const [expandedProductSections, setExpandedProductSections] = useState({});
     const [statusFilter, setStatusFilter] = useState('all');
     const [criticalityFilter, setCriticalityFilter] = useState('all');
+    const [epssFilter, setEpssFilter] = useState('all');
 
-    // Reset criticality filter when switching to a different asset
+    // Reset filters when switching to a different asset
     useEffect(() => {
         setCriticalityFilter('all');
+        setEpssFilter('all');
     }, [asset?.name]);
 
     // Group vulnerabilities by sub-product type (e.g., "Software", "Switch", "Storage")
@@ -380,12 +382,40 @@ const AlertsList = ({ asset, vulnerabilities = [], isOpen, onClose, isAuthentica
     }, [statusFilteredVulns]);
 
     // Step 2: filter by criticality
-    const filteredVulnerabilities = useMemo(() => {
+    const criticalityFilteredVulns = useMemo(() => {
         if (criticalityFilter === 'all') return statusFilteredVulns;
         return statusFilteredVulns.filter(v =>
             (v.severity?.toLowerCase() || '') === criticalityFilter
         );
     }, [statusFilteredVulns, criticalityFilter]);
+
+    // EPSS tier counts (computed from criticality-filtered set so counts respond to severity filter)
+    const epssCounts = useMemo(() => {
+        const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+        criticalityFilteredVulns.forEach(v => {
+            if (v.epssScore == null) return;
+            if (v.epssScore >= 0.5) counts.critical++;
+            else if (v.epssScore >= 0.1) counts.high++;
+            else if (v.epssScore >= 0.01) counts.medium++;
+            else counts.low++;
+        });
+        return counts;
+    }, [criticalityFilteredVulns]);
+
+    // Step 3: filter by EPSS tier
+    const filteredVulnerabilities = useMemo(() => {
+        if (epssFilter === 'all') return criticalityFilteredVulns;
+        return criticalityFilteredVulns.filter(v => {
+            if (v.epssScore == null) return false;
+            switch (epssFilter) {
+                case 'critical': return v.epssScore >= 0.5;
+                case 'high': return v.epssScore >= 0.1 && v.epssScore < 0.5;
+                case 'medium': return v.epssScore >= 0.01 && v.epssScore < 0.1;
+                case 'low': return v.epssScore < 0.01;
+                default: return true;
+            }
+        });
+    }, [criticalityFilteredVulns, epssFilter]);
 
     // Helper function to render a vulnerability card (used by both grouped and flat views)
     const renderVulnerabilityCard = (vuln, refs, hasExploits, hasRemediation, dueDateUrgency, pocSummary, remediationSummary, allRefs) => (
@@ -761,7 +791,8 @@ const AlertsList = ({ asset, vulnerabilities = [], isOpen, onClose, isAuthentica
                             <p className="alerts-panel-subtitle">
                                 {filteredVulnerabilities.length} of {vulnerabilities.length} {vulnerabilities.length === 1 ? 'vulnerability' : 'vulnerabilities'}
                                 {statusFilter !== 'all' && ` · ${statusFilter.replace('_', ' ')}`}
-                                {criticalityFilter !== 'all' && ` · ${criticalityFilter.charAt(0).toUpperCase() + criticalityFilter.slice(1)} only`}
+                                {criticalityFilter !== 'all' && ` · ${criticalityFilter.charAt(0).toUpperCase() + criticalityFilter.slice(1)} severity`}
+                                {epssFilter !== 'all' && ` · EPSS ${epssFilter.charAt(0).toUpperCase() + epssFilter.slice(1)}`}
                             </p>
                         </div>
                     </div>
@@ -789,8 +820,9 @@ const AlertsList = ({ asset, vulnerabilities = [], isOpen, onClose, isAuthentica
                     </div>
                 </div>
 
-                {/* Criticality Filter Bar */}
+                {/* Severity Filter Bar */}
                 <div className="criticality-filter-bar">
+                    <span className="filter-bar-label"><Shield size={12} /> Severity</span>
                     <button
                         className={`criticality-filter-btn ${criticalityFilter === 'all' ? 'active' : ''}`}
                         onClick={() => setCriticalityFilter('all')}
@@ -816,20 +848,50 @@ const AlertsList = ({ asset, vulnerabilities = [], isOpen, onClose, isAuthentica
                     ))}
                 </div>
 
+                {/* EPSS Exploit Likelihood Filter Bar */}
+                <div className="criticality-filter-bar epss-filter-bar">
+                    <span className="filter-bar-label"><Zap size={12} /> Exploit Likelihood</span>
+                    <button
+                        className={`criticality-filter-btn ${epssFilter === 'all' ? 'active' : ''}`}
+                        onClick={() => setEpssFilter('all')}
+                    >
+                        All
+                        <span className="criticality-filter-count">{criticalityFilteredVulns.length}</span>
+                    </button>
+                    {[
+                        { key: 'critical', label: 'Critical' },
+                        { key: 'high', label: 'High' },
+                        { key: 'medium', label: 'Medium' },
+                        { key: 'low', label: 'Low' },
+                    ].map(({ key, label }) => (
+                        <button
+                            key={key}
+                            className={`criticality-filter-btn ${key} ${epssFilter === key ? 'active' : ''} ${epssCounts[key] === 0 ? 'empty' : ''}`}
+                            onClick={() => setEpssFilter(key)}
+                            disabled={epssCounts[key] === 0}
+                        >
+                            {label}
+                            <span className="criticality-filter-count">{epssCounts[key]}</span>
+                        </button>
+                    ))}
+                </div>
+
                 <div className="alerts-list">
                     {filteredVulnerabilities.length === 0 ? (
                         <div className="alerts-empty">
                             <CheckCircle2 />
                             <h3 className="alerts-empty-title">No vulnerabilities</h3>
                             <p className="alerts-empty-text">
-                                {criticalityFilter !== 'all'
+                                {epssFilter !== 'all'
+                                    ? `No vulnerabilities with ${epssFilter} exploit likelihood found.`
+                                    : criticalityFilter !== 'all'
                                     ? `No ${criticalityFilter} severity vulnerabilities found.`
                                     : vulnerabilities.length > 0 && statusFilter !== 'all'
                                     ? 'No vulnerabilities match the selected status filter.'
                                     : 'No known vulnerabilities found for this asset in the selected time range.'}
                             </p>
                         </div>
-                    ) : groupedVulnerabilities && statusFilter === 'all' && criticalityFilter === 'all' ? (
+                    ) : groupedVulnerabilities && statusFilter === 'all' && criticalityFilter === 'all' && epssFilter === 'all' ? (
                         /* Grouped display by product/software type */
                         groupedVulnerabilities.map(group => (
                             <div key={group.type} className="product-section">

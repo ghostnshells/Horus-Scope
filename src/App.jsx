@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar/Sidebar';
 import Dashboard from './components/Dashboard/Dashboard';
 import AlertsList from './components/AlertsList/AlertsList';
 import NewsFeed from './components/NewsFeed';
+import Pulse from './components/Pulse/Pulse';
 import LoginPage from './components/Auth/LoginPage';
 import {
     fetchAllVulnerabilities,
@@ -47,6 +48,9 @@ function App() {
     const [viewMode, setViewMode] = useState('category'); // 'category' | 'vendor'
     const [selectedVendor, setSelectedVendor] = useState(null);
     const [selectedSubcategory, setSelectedSubcategory] = useState(null);
+
+    // Active view state: 'dashboard' | 'pulse'
+    const [activeView, setActiveView] = useState('dashboard');
 
     // Handle view mode change
     const handleViewModeChange = (mode) => {
@@ -229,34 +233,45 @@ function App() {
                     handleSubcategorySelect(subcat);
                     setIsMobileSidebarOpen(false);
                 }}
+                activeView={activeView}
+                onActiveViewChange={(view) => {
+                    setActiveView(view);
+                    setIsMobileSidebarOpen(false);
+                }}
             />
 
             <main className="main-content">
-                <Dashboard
-                    selectedCategory={selectedCategory}
-                    timeRange={timeRange}
-                    onTimeRangeChange={handleTimeRangeChange}
-                    vulnerabilities={vulnerabilities}
-                    vulnCounts={vulnCounts}
-                    stats={stats}
-                    isLoading={isLoading}
-                    loadingProgress={loadingProgress}
-                    onAssetClick={handleAssetClick}
-                    selectedAsset={selectedAsset}
-                    viewMode={viewMode}
-                    selectedVendor={selectedVendor}
-                    selectedSubcategory={selectedSubcategory}
-                    isAuthenticated={isLoggedIn}
-                    vulnStatuses={vulnStatuses}
-                    slaConfig={slaConfig}
-                />
+                {activeView === 'pulse' ? (
+                    <Pulse />
+                ) : (
+                    <>
+                        <Dashboard
+                            selectedCategory={selectedCategory}
+                            timeRange={timeRange}
+                            onTimeRangeChange={handleTimeRangeChange}
+                            vulnerabilities={vulnerabilities}
+                            vulnCounts={vulnCounts}
+                            stats={stats}
+                            isLoading={isLoading}
+                            loadingProgress={loadingProgress}
+                            onAssetClick={handleAssetClick}
+                            selectedAsset={selectedAsset}
+                            viewMode={viewMode}
+                            selectedVendor={selectedVendor}
+                            selectedSubcategory={selectedSubcategory}
+                            isAuthenticated={isLoggedIn}
+                            vulnStatuses={vulnStatuses}
+                            slaConfig={slaConfig}
+                        />
 
-                <aside className={`news-panel ${isNewsFeedCollapsed ? 'collapsed' : ''}`}>
-                    <NewsFeed
-                        isCollapsed={isNewsFeedCollapsed}
-                        onToggleCollapse={() => setIsNewsFeedCollapsed(!isNewsFeedCollapsed)}
-                    />
-                </aside>
+                        <aside className={`news-panel ${isNewsFeedCollapsed ? 'collapsed' : ''}`}>
+                            <NewsFeed
+                                isCollapsed={isNewsFeedCollapsed}
+                                onToggleCollapse={() => setIsNewsFeedCollapsed(!isNewsFeedCollapsed)}
+                            />
+                        </aside>
+                    </>
+                )}
             </main>
 
             <AlertsList

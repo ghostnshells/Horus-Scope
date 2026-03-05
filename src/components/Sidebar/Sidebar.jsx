@@ -19,7 +19,8 @@ import {
     ChevronDown,
     Building2,
     Layers,
-    Menu
+    Menu,
+    Activity
 } from 'lucide-react';
 import {
     ASSET_CATEGORIES,
@@ -82,7 +83,9 @@ const Sidebar = ({
     selectedVendor,
     onVendorSelect,
     selectedSubcategory,
-    onSubcategorySelect
+    onSubcategorySelect,
+    activeView = 'dashboard',
+    onActiveViewChange,
 }) => {
     const categories = Object.values(ASSET_CATEGORIES);
     const vendorGroups = getVendorGroups();
@@ -133,6 +136,7 @@ const Sidebar = ({
     // Handle vendor click
     const handleVendorClick = (vendor, e) => {
         e.stopPropagation();
+        if (onActiveViewChange) onActiveViewChange('dashboard');
         onVendorSelect(vendor);
         // Auto-expand the vendor when selected
         if (!expandedVendors[vendor]) {
@@ -143,6 +147,7 @@ const Sidebar = ({
     // Handle subcategory click
     const handleSubcategoryClick = (vendor, subcat, e) => {
         e.stopPropagation();
+        if (onActiveViewChange) onActiveViewChange('dashboard');
         if (selectedVendor !== vendor) {
             onVendorSelect(vendor);
         }
@@ -199,8 +204,9 @@ const Sidebar = ({
                     {!isCollapsed && <div className="sidebar-section-title">Overview</div>}
                     <nav className="sidebar-nav">
                         <div
-                            className={`sidebar-nav-item ${(viewMode === 'category' && selectedCategory === 'All') || (viewMode === 'vendor' && !selectedVendor) ? 'active' : ''}`}
+                            className={`sidebar-nav-item ${activeView === 'dashboard' && ((viewMode === 'category' && selectedCategory === 'All') || (viewMode === 'vendor' && !selectedVendor)) ? 'active' : ''}`}
                             onClick={() => {
+                                if (onActiveViewChange) onActiveViewChange('dashboard');
                                 if (viewMode === 'category') {
                                     onCategorySelect('All');
                                 } else {
@@ -221,6 +227,21 @@ const Sidebar = ({
                     </nav>
                 </div>
 
+                {/* Monitor Section */}
+                <div className="sidebar-section">
+                    {!isCollapsed && <div className="sidebar-section-title">Monitor</div>}
+                    <nav className="sidebar-nav">
+                        <div
+                            className={`sidebar-nav-item ${activeView === 'pulse' ? 'active' : ''}`}
+                            onClick={() => onActiveViewChange && onActiveViewChange('pulse')}
+                            title="The Pulse"
+                        >
+                            <Activity />
+                            {!isCollapsed && <span className="sidebar-nav-item-text">The Pulse</span>}
+                        </div>
+                    </nav>
+                </div>
+
                 {/* Category View */}
                 {viewMode === 'category' && (
                     <div className="sidebar-section">
@@ -233,8 +254,11 @@ const Sidebar = ({
                                 return (
                                     <div
                                         key={category}
-                                        className={`sidebar-nav-item ${selectedCategory === category ? 'active' : ''}`}
-                                        onClick={() => onCategorySelect(category)}
+                                        className={`sidebar-nav-item ${activeView === 'dashboard' && selectedCategory === category ? 'active' : ''}`}
+                                        onClick={() => {
+                                            if (onActiveViewChange) onActiveViewChange('dashboard');
+                                            onCategorySelect(category);
+                                        }}
                                         title={category}
                                     >
                                         <Icon />

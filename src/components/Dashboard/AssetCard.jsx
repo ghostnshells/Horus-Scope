@@ -14,7 +14,8 @@ import {
     Monitor,
     Cloud,
     Container,
-    ShieldAlert
+    ShieldAlert,
+    Zap
 } from 'lucide-react';
 import { ASSET_CATEGORIES } from '../../data/assets';
 import './AssetCard.css';
@@ -42,7 +43,7 @@ const categoryIcons = {
 
 const AssetCard = ({ asset, vulnCounts = {}, onClick, isSelected }) => {
     const Icon = categoryIcons[asset.category] || Server;
-    const { total = 0, critical = 0, high = 0, medium = 0, low = 0 } = vulnCounts;
+    const { total = 0, critical = 0, high = 0, medium = 0, low = 0, epssHigh = 0 } = vulnCounts;
 
     // Determine card severity class
     let severityClass = 'no-vulns';
@@ -102,6 +103,12 @@ const AssetCard = ({ asset, vulnCounts = {}, onClick, isSelected }) => {
                     <span className="asset-card-status">
                         <CheckCircle />
                         No vulnerabilities
+                    </span>
+                )}
+                {epssHigh > 0 && (
+                    <span className="asset-card-epss">
+                        <Zap size={12} />
+                        {epssHigh} likely exploited
                     </span>
                 )}
             </div>

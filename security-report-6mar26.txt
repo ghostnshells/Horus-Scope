@@ -1,0 +1,459 @@
+================================================================================
+HEIMDALL SECURITY ASSESSMENT REPORT
+Date: 6 March 2026
+================================================================================
+
+EXECUTIVE SUMMARY
+-----------------
+A comprehensive security assessment was performed across 5 domains:
+authentication/JWT, injection/input validation, API security/access control,
+secrets/configuration, and frontend security. The assessment identified 21
+unique findings: 3 Critical, 6 High, 9 Medium, and 3 Low severity issues.
+
+The application demonstrates strong fundamentals (parameterized SQL queries,
+bcrypt hashing, token rotation, IDOR protection) but has several exploitable
+vulnerabilities that should be remediated before production hardening.
+
+
+================================================================================
+CRITICAL FINDINGS
+================================================================================
+
+[C1] Cisco API Client Secret Exposed in Frontend Bundle
+------------------------------------------------------------------------
+Severity:   CRITICAL
+File:       src/services/ciscoApi.js:30-32
+Type:       Secret Exposure
+
+Description:
+The Cisco OAuth2 client_secret is loaded via a VITE_* environment variable,
+meaning it gets compiled into the JavaScript bundle served to browsers. Anyone
+can extract it from the built JS files.
+
+Code:
+    const getCredentials = () => {
+        const clientId = import.meta.env.VITE_CISCO_CLIENT_ID || '';
+        const clientSecret = import.meta.env.VITE_CISCO_CLIENT_CLIENT || '';
+        return { clientId, clientSecret };
+    };
+
+Impact:
+Attacker can extract the secret from dist/assets/*.js, forge requests to
+Cisco API, exhaust API quota, or inject malicious advisory data.
+
+Remediation:
+Move all Cisco API calls to a backend proxy endpoint. Never put secrets in
+VITE_* environment variables.
+
+
+[C2] Hardcoded JWT Secret Fallback
+------------------------------------------------------------------------
+Severity:   CRITICAL
+File:       server/lib/auth.js:9
+Type:       Authentication Bypass
+
+Description:
+If JWT_SECRET environment variable is unset, the application falls back to a
+hardcoded string 'heimdall-dev-secret-change-me'. Anyone who knows this default
+can forge valid JWT tokens for any user.
+
+Code:
+    const JWT_SECRET = process.env.JWT_SECRET || 'heimdall-dev-secret-change-me';
+
+Impact:
+Complete authentication bypass - attacker can generate tokens for any user
+email without knowing their password.
+
+Remediation:
+Remove the fallback and fail fast if unset:
+    const JWT_SECRET = process.env.JWT_SECRET;
+    if (!JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
+
+
+[C3] Admin Cache Refresh Bypasses Auth When ADMIN_API_KEY Is Unset
+------------------------------------------------------------------------
+Severity:   CRITICAL
+File:       server/index.js:729-733
+Type:       Authentication Bypass
+
+Description:
+The condition only enforces the API key check IF the env var is defined. If
+ADMIN_API_KEY is not set, the check evaluates to false and any unauthenticated
+user can trigger expensive cache refresh operations.
+
+Code:
+    const apiKey = req.headers['x-api-key'];
+    const expectedKey = process.env.ADMIN_API_KEY;
+    if (expectedKey && apiKey !== expectedKey) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+Impact:
+DoS vulnerability - attackers can repeatedly trigger cache refreshes, consuming
+server resources and disrupting service.
+
+Remediation:
+    if (!expectedKey || apiKey !== expectedKey) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+
+================================================================================
+HIGH FINDINGS
+================================================================================
+
+[H1] JWT Tokens Stored in localStorage (XSS Token Theft)
+------------------------------------------------------------------------
+Severity:   HIGH
+File:       src/services/authService.js:39-43
+Type:       Insecure Token Storage
+
+Description:
+Both access and refresh tokens are stored in localStorage. Any XSS
+vulnerability allows an attacker to steal tokens and hijack user sessions.
+
+Code:
+    export function storeAuth(accessToken, refreshToken, user) {
+        localStorage.setItem(TOKEN_KEY, accessToken);
+        localStorage.setItem(REFRESH_KEY, refreshToken);
+        ...
+    }
+
+Remediation:
+Store refresh tokens in httpOnly, Secure, SameSite cookies (server-set).
+Keep access tokens in memory only (React state / module-scoped variable).
+
+
+[H2] Custom HTML Sanitizer is Bypassable (XSS)
+------------------------------------------------------------------------
+Severity:   HIGH
+File:       src/components/NewsFeed/NewsModal.jsx:119, 147-173
+Type:       Cross-Site Scripting (XSS)
+
+Description:
+The custom sanitizeHtml() function sets innerHTML first (parsing dangerous
+HTML), then tries to strip attributes after. This approach is vulnerable to
+SVG-based XSS, <iframe srcdoc>, and other bypass vectors.
+
+Code:
+    dangerouslySetInnerHTML={{ __html: sanitizeHtml(article.content) }}
+
+    const sanitizeHtml = (html) => {
+        const temp = document.createElement('div');
+        temp.innerHTML = html;  // HTML is already parsed here
+        // ... basic attribute filtering ...
+        return temp.innerHTML;
+    };
+
+Remediation:
+Replace with DOMPurify:
+    import DOMPurify from 'dompurify';
+    const clean = DOMPurify.sanitize(article.content, {
+        ALLOWED_TAGS: ['p', 'strong', 'em', 'a', 'ul', 'ol', 'li'],
+        ALLOWED_ATTR: ['href', 'title']
+    });
+
+
+[H3] NVD API Key Exposed in Frontend
+------------------------------------------------------------------------
+Severity:   HIGH
+File:       src/services/nvdApi.js:11
+Type:       Secret Exposure
+
+Description:
+NVD API key is loaded via VITE_NVD_API_KEY, bundled into client-side JS, and
+visible in browser DevTools network requests.
+
+Code:
+    const NVD_API_KEY = import.meta.env.VITE_NVD_API_KEY || '';
+
+Remediation:
+Route NVD API calls through a backend proxy. Remove VITE_NVD_API_KEY.
+
+
+[H4] No Rate Limiting on Auth Endpoints
+------------------------------------------------------------------------
+Severity:   HIGH
+Files:      server/index.js (login/signup routes)
+            api/auth/login.js, api/auth/signup.js
+Type:       Brute Force / Credential Stuffing
+
+Description:
+Login, signup, and most auth endpoints have zero rate limiting. Password reset
+does have a 3/hour limit per email (good), but login/signup do not.
+
+Impact:
+Enables brute-force attacks, credential stuffing, and account enumeration.
+
+Remediation:
+Add express-rate-limit middleware:
+    const loginLimiter = rateLimit({ windowMs: 15*60*1000, max: 5 });
+    app.post('/api/auth/login', loginLimiter, ...);
+
+
+[H5] CORS Defaults to Wildcard with Credentials
+------------------------------------------------------------------------
+Severity:   HIGH
+File:       server/index.js:78-86
+Type:       Cross-Origin Misconfiguration
+
+Description:
+If CORS_ORIGIN env var is unset, origin defaults to '*' while credentials
+is set to true. This allows any website to make authenticated cross-origin
+requests.
+
+Code:
+    const corsOrigins = process.env.CORS_ORIGIN ? ... : '*';
+    app.use(cors({ origin: corsOrigins, credentials: true }));
+
+Remediation:
+Require CORS_ORIGIN to be explicitly configured. Fail if unset.
+
+
+[H6] Stack Traces Leaked Unconditionally in Health Endpoint
+------------------------------------------------------------------------
+Severity:   HIGH
+File:       api/health.js:41, 70
+Type:       Information Disclosure
+
+Description:
+Unlike api/vulnerabilities.js which conditionally shows stacks, the health
+endpoint always exposes full error stack traces including internal file paths
+and library details.
+
+Remediation:
+    stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+
+
+================================================================================
+MEDIUM FINDINGS
+================================================================================
+
+[M1] Missing Security Headers
+------------------------------------------------------------------------
+Severity:   MEDIUM
+File:       server/index.js
+Type:       Missing Controls
+
+Description:
+No Strict-Transport-Security, X-Frame-Options, X-Content-Type-Options,
+Content-Security-Policy, or Referrer-Policy headers are set.
+
+Remediation:
+Add helmet middleware or set headers manually:
+    app.use(helmet());
+
+
+[M2] Weak Password Policy
+------------------------------------------------------------------------
+Severity:   MEDIUM
+Files:      server/index.js:194, api/auth/signup.js:17
+Type:       Authentication Weakness
+
+Description:
+Only enforces length >= 8. No requirement for mixed case, numbers, or special
+characters. Passwords like "aaaaaaaa" are accepted.
+
+Remediation:
+Require minimum 12 characters with uppercase, lowercase, number, and special
+character. Consider checking against common password lists.
+
+
+[M3] No Input Validation on timeRange Parameter
+------------------------------------------------------------------------
+Severity:   MEDIUM
+File:       api/vulnerabilities.js:11
+Type:       Cache Key Injection
+
+Description:
+Arbitrary strings are used to construct Redis cache keys without whitelist
+validation.
+
+Code:
+    const timeRange = req.query.timeRange || '7d';
+    const data = await getVulnData(timeRange);  // constructs key: vuln:all:${timeRange}
+
+Remediation:
+    const VALID_RANGES = ['24h', '7d', '30d', '90d', '119d'];
+    if (!VALID_RANGES.includes(timeRange)) {
+        return res.status(400).json({ error: 'Invalid timeRange' });
+    }
+
+
+[M4] Mass Assignment in SLA Configuration
+------------------------------------------------------------------------
+Severity:   MEDIUM
+File:       server/index.js:530
+Type:       Mass Assignment
+
+Description:
+The entire req.body is passed to setSLAConfig() without destructuring
+expected fields.
+
+Remediation:
+    const { critical, high, medium, low } = req.body || {};
+    const config = { critical, high, medium, low };
+
+
+[M5] Email Verification Not Enforced on Login
+------------------------------------------------------------------------
+Severity:   MEDIUM
+Files:      server/index.js:166, server/lib/auth.js:71
+Type:       Authentication Weakness
+
+Description:
+Users can sign up and immediately log in without verifying their email,
+making the verification flow optional.
+
+
+[M6] Logout Doesn't Require Refresh Token
+------------------------------------------------------------------------
+Severity:   MEDIUM
+File:       api/auth/logout.js:13-14
+Type:       Session Management
+
+Description:
+If the client doesn't send the refresh token, logout returns success without
+actually revoking anything. Zombie sessions may persist.
+
+
+[M7] Missing CVE ID Format Validation
+------------------------------------------------------------------------
+Severity:   MEDIUM
+Files:      api/lifecycle/status.js:7-10, api/lifecycle/bulk.js:12-26
+Type:       Input Validation
+
+Description:
+CVE IDs are not validated against expected format (CVE-YYYY-NNNN+). Individual
+elements in the bulk array are not type-checked.
+
+Remediation:
+    const CVE_REGEX = /^CVE-\d{4}-\d{4,}$/;
+
+
+[M8] Unvalidated URLs in News Feed Links
+------------------------------------------------------------------------
+Severity:   MEDIUM
+File:       src/components/NewsFeed/NewsModal.jsx:39, 132
+Type:       Open Redirect / javascript: URI
+
+Description:
+Article links from external RSS feeds are opened via window.open() without
+protocol validation. A compromised RSS feed could inject javascript: URLs.
+
+Remediation:
+Validate URL protocol before opening:
+    const url = new URL(article.link);
+    if (!['http:', 'https:'].includes(url.protocol)) return;
+
+
+[M9] Database SSL rejectUnauthorized: false in Production
+------------------------------------------------------------------------
+Severity:   MEDIUM
+File:       server/lib/db.js:8-10
+Type:       Transport Security
+
+Description:
+SSL certificate verification is disabled for non-localhost connections,
+enabling man-in-the-middle attacks on the database connection.
+
+Code:
+    ssl: process.env.DATABASE_URL?.includes('localhost')
+        ? false
+        : { rejectUnauthorized: false },
+
+Remediation:
+Use { rejectUnauthorized: true } for production connections.
+
+
+================================================================================
+LOW FINDINGS
+================================================================================
+
+[L1] Non-Constant-Time API Key Comparison
+------------------------------------------------------------------------
+Severity:   LOW
+File:       server/index.js:733
+Type:       Timing Attack
+
+Description:
+Uses !== instead of crypto.timingSafeEqual() for API key comparison.
+Theoretical timing attack vector.
+
+
+[L2] User Enumeration via Signup
+------------------------------------------------------------------------
+Severity:   LOW
+File:       api/auth/signup.js:37-38
+Type:       Information Disclosure
+
+Description:
+Returns "User already exists" on duplicate email, revealing registered
+accounts. Login and forgot-password correctly return generic messages.
+
+
+[L3] Health Endpoint Exposes Environment Config
+------------------------------------------------------------------------
+Severity:   LOW
+File:       api/health.js:10-16
+Type:       Information Disclosure
+
+Description:
+Shows which environment variables are configured (as booleans). Useful for
+attacker reconnaissance.
+
+
+================================================================================
+POSITIVE SECURITY PRACTICES
+================================================================================
+
++ All SQL queries use parameterized statements ($1, $2) - no SQL injection
++ bcrypt with 12 salt rounds for password hashing
++ Password reset tokens are SHA-256 hashed before storage
++ Refresh token rotation implemented (old token revoked on refresh)
++ 15-minute access token expiry
++ noopener,noreferrer used on external links
++ URL tokens cleared from browser history via replaceState()
++ No use of eval(), exec(), or dynamic code execution
++ IDOR protection via req.user.email from JWT (not user-supplied)
++ Password reset uses silent no-op if user not found (prevents enumeration)
++ CRON_SECRET authentication for scheduled jobs
+
+
+================================================================================
+REMEDIATION PRIORITY
+================================================================================
+
+P0 - Immediate (Exploitable with zero prerequisites):
+  [C1] Remove Cisco client secret from frontend, move to backend proxy
+  [C2] Remove JWT_SECRET fallback, fail if unset
+  [C3] Fix admin API key check (!expectedKey || apiKey !== expectedKey)
+
+P1 - Urgent:
+  [H2] Replace custom HTML sanitizer with DOMPurify
+  [H3] Move NVD API key to backend-only
+  [H4] Add rate limiting (express-rate-limit) on auth endpoints
+  [H5] Fix CORS to require explicit origin configuration
+  [H6] Conditional stack traces in health endpoint
+
+P2 - Important:
+  [M1] Add security headers (helmet middleware)
+  [H1] Move tokens from localStorage to httpOnly cookies + memory
+  [M3] Whitelist timeRange parameter values
+  [M9] Fix database SSL certificate verification
+
+P3 - Hardening:
+  [M2] Strengthen password policy
+  [M4] Fix mass assignment in SLA config
+  [M5] Enforce email verification on login
+  [M6] Require refresh token on logout
+  [M7] Add CVE ID format validation
+  [M8] Validate URLs before opening
+  [L1] Use crypto.timingSafeEqual for key comparison
+  [L2] Generic response on signup duplicate
+  [L3] Restrict health endpoint details
+
+
+================================================================================
+END OF REPORT
+================================================================================

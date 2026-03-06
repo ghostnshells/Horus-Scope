@@ -53,17 +53,35 @@ function setCache(data) {
 }
 
 /**
+ * Build regions query param string from regions object
+ * e.g. { aws: ['us-east-1', 'us-west-2'], gcp: ['us-central1'] } => "aws:us-east-1,us-west-2|gcp:us-central1"
+ */
+function buildRegionsParam(regions) {
+    if (!regions) return '';
+    return Object.entries(regions)
+        .filter(([, ids]) => ids && ids.length > 0)
+        .map(([provider, ids]) => `${provider}:${ids.join(',')}`)
+        .join('|');
+}
+
+/**
  * Fetch cloud status data
  * @param {boolean} forceRefresh - Bypass cache
+ * @param {Object} [regions] - Region filter per provider
  * @returns {Promise<Object>} Cloud status data
  */
-export async function fetchCloudStatus(forceRefresh = false) {
-    if (!forceRefresh) {
+export async function fetchCloudStatus(forceRefresh = false, regions = null) {
+    if (!forceRefresh && !regions) {
         const cached = getCached();
         if (cached) return cached;
     }
 
-    const url = forceRefresh ? `${API_URL}?refresh=true` : API_URL;
+    const params = new URLSearchParams();
+    if (forceRefresh) params.set('refresh', 'true');
+    const regionsStr = buildRegionsParam(regions);
+    if (regionsStr) params.set('regions', regionsStr);
+    const qs = params.toString();
+    const url = qs ? `${API_URL}?${qs}` : API_URL;
     const response = await fetch(url);
 
     if (!response.ok) {

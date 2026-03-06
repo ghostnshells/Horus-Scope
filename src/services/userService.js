@@ -28,3 +28,21 @@ export async function setUserAssets(assetIds) {
     if (!response.ok) throw new Error(data.error || 'Failed to save assets');
     return data.assets;
 }
+
+export async function getCloudRegions() {
+    const response = await fetchWithAuth(`${USER_API}/cloud-regions`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Failed to get cloud regions');
+    return data.regions; // null = no preferences (use defaults), or { aws: [...], gcp: [...], azure: [...] }
+}
+
+export async function setCloudRegions(regions) {
+    const response = await fetchWithAuth(`${USER_API}/cloud-regions`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ regions })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Failed to save cloud regions');
+    return data.regions;
+}

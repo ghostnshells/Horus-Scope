@@ -228,6 +228,42 @@
     border: 0;
 }
 
+/* Cloud Regions */
+.settings-regions-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.settings-region-provider {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.settings-region-provider-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-4);
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.settings-region-provider-name {
+    font-size: var(--text-sm);
+    font-weight: var(--font-semibold);
+    color: var(--text-primary);
+    margin-right: auto;
+}
+
+.settings-region-grid {
+    columns: 2;
+    column-gap: var(--space-4);
+    padding: var(--space-2) var(--space-4);
+}
+
 /* Save bar */
 .settings-save-bar {
     display: flex;
@@ -298,6 +334,10 @@
 
     .settings-asset-columns {
         columns: 2;
+    }
+
+    .settings-region-grid {
+        columns: 1;
     }
 
     .settings-row {

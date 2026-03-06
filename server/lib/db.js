@@ -91,6 +91,14 @@ export async function initializeDatabase() {
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 PRIMARY KEY (user_email, asset_id)
             );
+
+            CREATE TABLE IF NOT EXISTS user_cloud_regions (
+                user_email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+                provider   TEXT NOT NULL,
+                region     TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (user_email, provider, region)
+            );
         `);
         console.log('[DB] Schema initialised');
     } finally {

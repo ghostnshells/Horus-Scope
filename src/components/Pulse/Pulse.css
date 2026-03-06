@@ -127,6 +127,15 @@
     font-size: var(--text-base);
     font-weight: var(--font-semibold);
     color: var(--text-primary);
+    display: block;
+}
+
+.provider-card-region {
+    display: block;
+    font-size: 11px;
+    color: var(--text-tertiary);
+    font-weight: 400;
+    margin-top: 1px;
 }
 
 /* Status Badge */

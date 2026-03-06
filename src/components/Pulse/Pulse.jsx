@@ -7,7 +7,7 @@ import './Pulse.css';
 
 const AUTO_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
-const Pulse = () => {
+const Pulse = ({ userCloudRegions }) => {
     const [data, setData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -17,7 +17,7 @@ const Pulse = () => {
         setIsLoading(true);
         setError(null);
         try {
-            const result = await fetchCloudStatus(forceRefresh);
+            const result = await fetchCloudStatus(forceRefresh, userCloudRegions);
             setData(result);
         } catch (err) {
             console.error('[Pulse] Fetch error:', err);
@@ -25,7 +25,7 @@ const Pulse = () => {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [userCloudRegions]);
 
     // Initial fetch
     useEffect(() => {
@@ -109,7 +109,7 @@ const Pulse = () => {
                     {providerOrder.map(id => {
                         const provider = providers[id];
                         if (!provider) return null;
-                        return <ProviderCard key={id} provider={provider} />;
+                        return <ProviderCard key={id} provider={provider} selectedRegions={userCloudRegions} />;
                     })}
                 </div>
             </div>

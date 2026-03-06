@@ -13,7 +13,8 @@
       "Bash(python3:*)",
       "Bash(chmod:*)",
       "WebFetch(domain:services.nvd.nist.gov)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(node:*)"
     ]
   }
 }

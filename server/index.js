@@ -48,6 +48,7 @@ import {
     verifyAccessToken
 } from './lib/auth.js';
 import { getUserAssets, setUserAssets } from './lib/userAssetsService.js';
+import { getUserCloudRegions, setUserCloudRegions } from './lib/userCloudRegionsService.js';
 import {
     getVulnStatus,
     setVulnStatus,
@@ -56,7 +57,7 @@ import {
     setSLAConfig,
     setBulkStatus
 } from './lib/lifecycleService.js';
-import { fetchCloudStatus } from './lib/cloudStatusService.js';
+import { fetchCloudStatus, computeDailyStatus, computeOverallStatus } from './lib/cloudStatusService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -420,6 +421,36 @@ app.put('/api/user/assets', requireAuth, async (req, res) => {
     }
 });
 
+// GET /api/user/cloud-regions
+app.get('/api/user/cloud-regions', requireAuth, async (req, res) => {
+    try {
+        const regions = await getUserCloudRegions(req.user.email);
+        res.json({ success: true, regions });
+    } catch (error) {
+        console.error('Get cloud regions error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// PUT /api/user/cloud-regions
+app.put('/api/user/cloud-regions', requireAuth, async (req, res) => {
+    try {
+        const { regions } = req.body || {};
+        if (!regions || typeof regions !== 'object') {
+            return res.status(400).json({ error: 'regions object is required' });
+        }
+
+        const result = await setUserCloudRegions(req.user.email, regions);
+        res.json({ success: true, regions: result });
+    } catch (error) {
+        if (error.message.includes('Invalid')) {
+            return res.status(400).json({ error: error.message });
+        }
+        console.error('Set cloud regions error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // ===================
 // API Routes — Lifecycle
 // ===================
@@ -543,37 +574,79 @@ const CLOUD_STATUS_CACHE_TTL = 300; // 5 minutes
 app.get('/api/cloud-status', async (req, res) => {
     try {
         const forceRefresh = req.query.refresh === 'true';
+        const regionsParam = req.query.regions; // e.g. "aws:us-east-1,us-west-2|gcp:us-central1"
+
+        let data;
+        let wasCached = false;
 
         // Try cache first
         if (!forceRefresh) {
             try {
                 const cached = await cache.get(CLOUD_STATUS_CACHE_KEY);
                 if (cached) {
-                    return res.json({
-                        success: true,
-                        data: cached,
-                        cached: true,
-                    });
+                    data = cached;
+                    wasCached = true;
                 }
             } catch (cacheErr) {
                 console.warn('[CloudStatus] Cache read failed:', cacheErr.message);
             }
         }
 
-        // Fetch fresh data
-        const data = await fetchCloudStatus();
+        if (!data) {
+            data = await fetchCloudStatus();
 
-        // Store in cache
-        try {
-            await cache.set(CLOUD_STATUS_CACHE_KEY, data, { ex: CLOUD_STATUS_CACHE_TTL });
-        } catch (cacheErr) {
-            console.warn('[CloudStatus] Cache write failed:', cacheErr.message);
+            // Store in cache (always cache the full unfiltered data)
+            try {
+                await cache.set(CLOUD_STATUS_CACHE_KEY, data, { ex: CLOUD_STATUS_CACHE_TTL });
+            } catch (cacheErr) {
+                console.warn('[CloudStatus] Cache write failed:', cacheErr.message);
+            }
+        }
+
+        // Apply region filtering if requested
+        if (regionsParam) {
+            const regionFilter = {};
+            for (const segment of regionsParam.split('|')) {
+                const [provider, ...regionParts] = segment.split(':');
+                if (provider && regionParts.length > 0) {
+                    regionFilter[provider] = regionParts.join(':').split(',');
+                }
+            }
+
+            const filteredProviders = {};
+            for (const [providerId, providerData] of Object.entries(data.providers)) {
+                const allowedRegions = regionFilter[providerId];
+                if (!allowedRegions) {
+                    // No filter for this provider — include all
+                    filteredProviders[providerId] = providerData;
+                    continue;
+                }
+
+                const allowedSet = new Set(allowedRegions);
+                const filtered = providerData.incidents.filter(inc => {
+                    if (!inc.regions) return true;
+                    // Include if incident is global or matches any allowed region
+                    return inc.regions.includes('global') || inc.regions.some(r => allowedSet.has(r));
+                });
+
+                const dailyStatus = computeDailyStatus(filtered);
+                const overallStatus = computeOverallStatus(dailyStatus, filtered);
+
+                filteredProviders[providerId] = {
+                    ...providerData,
+                    incidents: filtered.sort((a, b) => new Date(b.created) - new Date(a.created)),
+                    dailyStatus,
+                    overallStatus,
+                };
+            }
+
+            data = { ...data, providers: filteredProviders };
         }
 
         res.json({
             success: true,
             data,
-            cached: false,
+            cached: wasCached,
         });
     } catch (error) {
         console.error('[CloudStatus] Error:', error);

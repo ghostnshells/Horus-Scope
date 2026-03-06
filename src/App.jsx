@@ -25,7 +25,7 @@ import {
     updateStoredUser,
     resendVerification
 } from './services/authService';
-import { getUserAssets } from './services/userService';
+import { getUserAssets, getCloudRegions } from './services/userService';
 
 function App() {
     // State
@@ -57,6 +57,7 @@ function App() {
 
     // User asset customization
     const [userAssets, setUserAssets] = useState(null); // null = show all, array = filtered
+    const [userCloudRegions, setUserCloudRegions] = useState(null); // null = use defaults
 
     // Verification banner
     const [showVerificationBanner, setShowVerificationBanner] = useState(true);
@@ -89,14 +90,18 @@ function App() {
         }
     }, []);
 
-    // Load user asset preferences on login
+    // Load user preferences on login
     useEffect(() => {
         if (isLoggedIn) {
             getUserAssets()
                 .then(assets => setUserAssets(assets))
                 .catch(() => setUserAssets(null));
+            getCloudRegions()
+                .then(regions => setUserCloudRegions(regions))
+                .catch(() => setUserCloudRegions(null));
         } else {
             setUserAssets(null);
+            setUserCloudRegions(null);
         }
     }, [isLoggedIn]);
 
@@ -304,6 +309,7 @@ function App() {
                 user={user}
                 onBack={() => setAuthView(null)}
                 onAssetsChanged={(ids) => setUserAssets(ids)}
+                onCloudRegionsChanged={(regions) => setUserCloudRegions(regions)}
             />
         );
     }
@@ -385,7 +391,7 @@ function App() {
 
             <main className="main-content">
                 {activeView === 'pulse' ? (
-                    <Pulse />
+                    <Pulse userCloudRegions={userCloudRegions} />
                 ) : (
                     <>
                         <Dashboard

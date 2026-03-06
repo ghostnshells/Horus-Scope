@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, CheckCircle, Mail, Shield, Save, Loader } from 'lucide-react';
 import { ASSETS } from '../../data/assets';
-import { getUserAssets, setUserAssets } from '../../services/userService';
+import { CLOUD_REGIONS, REGION_PROVIDERS, getDefaultRegions } from '../../data/cloudRegions';
+import { getUserAssets, setUserAssets, getCloudRegions, setCloudRegions } from '../../services/userService';
 import { resendVerification } from '../../services/authService';
 import './Settings.css';
 
 // Sorted alphabetically once
 const SORTED_ASSETS = [...ASSETS].sort((a, b) => a.name.localeCompare(b.name));
 
-const Settings = ({ user, onBack, onAssetsChanged, onEmailVerified }) => {
+const Settings = ({ user, onBack, onAssetsChanged, onCloudRegionsChanged, onEmailVerified }) => {
     const [selectedAssets, setSelectedAssets] = useState(new Set(ASSETS.map(a => a.id)));
     const [initialAssets, setInitialAssets] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -17,22 +18,46 @@ const Settings = ({ user, onBack, onAssetsChanged, onEmailVerified }) => {
     const [verificationSent, setVerificationSent] = useState(false);
     const [verificationSending, setVerificationSending] = useState(false);
 
-    // Load user's asset preferences
+    // Cloud region state
+    const [selectedRegions, setSelectedRegions] = useState(() => {
+        const defaults = getDefaultRegions();
+        const state = {};
+        for (const provider of REGION_PROVIDERS) {
+            state[provider] = new Set(defaults[provider]);
+        }
+        return state;
+    });
+    const [initialRegions, setInitialRegions] = useState(null);
+
+    // Load user preferences
     useEffect(() => {
-        getUserAssets()
-            .then(assets => {
-                if (assets) {
-                    setSelectedAssets(new Set(assets));
-                    setInitialAssets(new Set(assets));
-                } else {
-                    // null = no preferences, all selected
-                    const all = new Set(ASSETS.map(a => a.id));
-                    setSelectedAssets(all);
-                    setInitialAssets(null);
+        Promise.all([
+            getUserAssets().catch(() => null),
+            getCloudRegions().catch(() => null),
+        ]).then(([assets, regions]) => {
+            // Assets
+            if (assets) {
+                setSelectedAssets(new Set(assets));
+                setInitialAssets(new Set(assets));
+            } else {
+                const all = new Set(ASSETS.map(a => a.id));
+                setSelectedAssets(all);
+                setInitialAssets(null);
+            }
+
+            // Cloud regions
+            const defaults = getDefaultRegions();
+            if (regions) {
+                const state = {};
+                for (const provider of REGION_PROVIDERS) {
+                    state[provider] = new Set(regions[provider] || defaults[provider]);
                 }
-            })
-            .catch(err => console.error('Failed to load asset preferences:', err))
-            .finally(() => setIsLoading(false));
+                setSelectedRegions(state);
+                setInitialRegions(regions);
+            } else {
+                setInitialRegions(null);
+            }
+        }).finally(() => setIsLoading(false));
     }, []);
 
     const toggleAsset = (assetId) => {
@@ -58,15 +83,57 @@ const Settings = ({ user, onBack, onAssetsChanged, onEmailVerified }) => {
         setSaveStatus(null);
     };
 
+    const toggleRegion = (provider, regionId) => {
+        setSelectedRegions(prev => {
+            const next = { ...prev };
+            const providerSet = new Set(prev[provider]);
+            if (providerSet.has(regionId)) {
+                providerSet.delete(regionId);
+            } else {
+                providerSet.add(regionId);
+            }
+            next[provider] = providerSet;
+            return next;
+        });
+        setSaveStatus(null);
+    };
+
+    const selectAllRegions = (provider) => {
+        setSelectedRegions(prev => ({
+            ...prev,
+            [provider]: new Set(CLOUD_REGIONS[provider].regions.map(r => r.id)),
+        }));
+        setSaveStatus(null);
+    };
+
+    const deselectAllRegions = (provider) => {
+        setSelectedRegions(prev => ({
+            ...prev,
+            [provider]: new Set(),
+        }));
+        setSaveStatus(null);
+    };
+
     const handleSave = async () => {
         setIsSaving(true);
         setSaveStatus(null);
         try {
+            // Save assets
             const ids = Array.from(selectedAssets);
             await setUserAssets(ids);
             setInitialAssets(new Set(ids));
-            setSaveStatus('saved');
             if (onAssetsChanged) onAssetsChanged(ids);
+
+            // Save cloud regions
+            const regionsPayload = {};
+            for (const provider of REGION_PROVIDERS) {
+                regionsPayload[provider] = Array.from(selectedRegions[provider]);
+            }
+            await setCloudRegions(regionsPayload);
+            setInitialRegions(regionsPayload);
+            if (onCloudRegionsChanged) onCloudRegionsChanged(regionsPayload);
+
+            setSaveStatus('saved');
         } catch (err) {
             console.error('Failed to save:', err);
             setSaveStatus('error');
@@ -87,9 +154,8 @@ const Settings = ({ user, onBack, onAssetsChanged, onEmailVerified }) => {
         }
     };
 
-    const hasChanges = (() => {
+    const hasAssetChanges = (() => {
         if (initialAssets === null) {
-            // No preferences saved yet — changed if not all selected
             return selectedAssets.size !== ASSETS.length;
         }
         if (selectedAssets.size !== initialAssets.size) return true;
@@ -99,6 +165,22 @@ const Settings = ({ user, onBack, onAssetsChanged, onEmailVerified }) => {
         return false;
     })();
 
+    const hasRegionChanges = (() => {
+        const defaults = getDefaultRegions();
+        for (const provider of REGION_PROVIDERS) {
+            const current = Array.from(selectedRegions[provider]).sort();
+            const initial = initialRegions
+                ? (initialRegions[provider] || defaults[provider]).slice().sort()
+                : defaults[provider].slice().sort();
+            if (current.length !== initial.length) return true;
+            for (let i = 0; i < current.length; i++) {
+                if (current[i] !== initial[i]) return true;
+            }
+        }
+        return false;
+    })();
+
+    const hasChanges = hasAssetChanges || hasRegionChanges;
     const allSelected = selectedAssets.size === ASSETS.length;
 
     return (
@@ -206,31 +288,94 @@ const Settings = ({ user, onBack, onAssetsChanged, onEmailVerified }) => {
                         </div>
                     )}
 
-                    <div className="settings-save-bar">
-                        <button
-                            className="settings-save-btn"
-                            onClick={handleSave}
-                            disabled={isSaving || !hasChanges}
-                        >
-                            {isSaving ? (
-                                <Loader size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                            ) : (
-                                <Save size={16} />
-                            )}
-                            {isSaving ? 'Saving...' : 'Save Preferences'}
-                        </button>
-                        {saveStatus === 'saved' && (
-                            <span className="settings-save-status success">
-                                <CheckCircle size={14} /> Saved!
-                            </span>
-                        )}
-                        {saveStatus === 'error' && (
-                            <span className="settings-save-status error">
-                                Failed to save. Try again.
-                            </span>
-                        )}
-                    </div>
                 </section>
+
+                {/* Cloud Regions Section */}
+                <section className="settings-section">
+                    <div className="settings-section-header">
+                        <h2 className="settings-section-title">Cloud Regions</h2>
+                        <span className="settings-asset-count">
+                            Monitored regions for The Pulse
+                        </span>
+                    </div>
+
+                    {isLoading ? (
+                        <div className="settings-loading">
+                            <Loader size={24} style={{ animation: 'spin 1s linear infinite' }} />
+                            <span>Loading preferences...</span>
+                        </div>
+                    ) : (
+                        <div className="settings-regions-container">
+                            {REGION_PROVIDERS.map(providerId => {
+                                const config = CLOUD_REGIONS[providerId];
+                                const providerRegions = selectedRegions[providerId] || new Set();
+                                const allProviderSelected = providerRegions.size === config.regions.length;
+
+                                return (
+                                    <div key={providerId} className="settings-region-provider">
+                                        <div className="settings-region-provider-header">
+                                            <span className="settings-region-provider-name">{config.name}</span>
+                                            <span className="settings-asset-count">
+                                                {providerRegions.size}/{config.regions.length}
+                                            </span>
+                                            <button
+                                                className="settings-toggle-all-btn"
+                                                onClick={() => allProviderSelected
+                                                    ? deselectAllRegions(providerId)
+                                                    : selectAllRegions(providerId)
+                                                }
+                                            >
+                                                {allProviderSelected ? 'Deselect All' : 'Select All'}
+                                            </button>
+                                        </div>
+                                        <div className="settings-region-grid">
+                                            {config.regions.map(region => (
+                                                <label
+                                                    key={region.id}
+                                                    className={`settings-asset-row ${providerRegions.has(region.id) ? 'selected' : ''}`}
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={providerRegions.has(region.id)}
+                                                        onChange={() => toggleRegion(providerId, region.id)}
+                                                        className="settings-native-checkbox"
+                                                    />
+                                                    <span className="settings-asset-name">{region.name}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </section>
+
+                {/* Save Bar */}
+                <div className="settings-save-bar">
+                    <button
+                        className="settings-save-btn"
+                        onClick={handleSave}
+                        disabled={isSaving || !hasChanges}
+                    >
+                        {isSaving ? (
+                            <Loader size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                        ) : (
+                            <Save size={16} />
+                        )}
+                        {isSaving ? 'Saving...' : 'Save Preferences'}
+                    </button>
+                    {saveStatus === 'saved' && (
+                        <span className="settings-save-status success">
+                            <CheckCircle size={14} /> Saved!
+                        </span>
+                    )}
+                    {saveStatus === 'error' && (
+                        <span className="settings-save-status error">
+                            Failed to save. Try again.
+                        </span>
+                    )}
+                </div>
             </div>
         </div>
     );

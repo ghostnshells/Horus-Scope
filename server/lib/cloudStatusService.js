@@ -2,6 +2,7 @@
 // Normalizes into a unified data model with daily status and incidents
 
 import { XMLParser } from 'fast-xml-parser';
+import { matchRegions } from './cloudRegions.js';
 
 const FEEDS = {
     aws: {
@@ -116,6 +117,8 @@ function parseAWSFeed(xmlText) {
             const description = item.description || '';
             const status = inferStatus(title + ' ' + description);
 
+            const regions = matchRegions('aws', title + ' ' + description);
+
             return {
                 id: `aws-${pubDate.getTime()}-${title.slice(0, 20).replace(/\W/g, '')}`,
                 title: title,
@@ -125,6 +128,7 @@ function parseAWSFeed(xmlText) {
                 created: pubDate.toISOString(),
                 resolved: status === 'resolved' ? pubDate.toISOString() : null,
                 affectedServices: extractServices(title, description),
+                regions: regions.length > 0 ? regions : ['global'],
                 updates: [{
                     timestamp: pubDate.toISOString(),
                     message: description.replace(/<[^>]*>/g, '').trim(),
@@ -162,6 +166,10 @@ function parseGCPFeed(jsonText) {
             const severity = inc.severity === 'high' ? 'major' : inc.severity === 'medium' ? 'minor' : 'info';
             const isResolved = inc.end || inc.status_impact === 'SERVICE_DISRUPTION_GONE';
 
+            const affectedProducts = (inc.affected_products || []).map(p => p.title || p);
+            const regionText = affectedProducts.join(' ') + ' ' + (inc.external_desc || '');
+            const regions = matchRegions('gcp', regionText);
+
             return {
                 id: `gcp-${inc.id || inc.number || created.getTime()}`,
                 title: inc.external_desc || inc.service_name || 'GCP Incident',
@@ -170,7 +178,8 @@ function parseGCPFeed(jsonText) {
                 severity: severity,
                 created: created.toISOString(),
                 resolved: inc.end ? new Date(inc.end).toISOString() : null,
-                affectedServices: (inc.affected_products || []).map(p => p.title || p),
+                affectedServices: affectedProducts,
+                regions: regions.length > 0 ? regions : ['global'],
                 updates,
             };
         })
@@ -203,6 +212,8 @@ function parseAzureFeed(xmlText) {
             const cleanContent = content.replace(/<[^>]*>/g, '').trim();
             const status = inferStatus(title + ' ' + cleanContent);
 
+            const regions = matchRegions('azure', title + ' ' + cleanContent);
+
             return {
                 id: `azure-${entry.id || published.getTime()}-${title.slice(0, 20).replace(/\W/g, '')}`,
                 title,
@@ -212,6 +223,7 @@ function parseAzureFeed(xmlText) {
                 created: published.toISOString(),
                 resolved: status === 'resolved' ? published.toISOString() : null,
                 affectedServices: extractServices(title, cleanContent),
+                regions: regions.length > 0 ? regions : ['global'],
                 updates: [{
                     timestamp: published.toISOString(),
                     message: cleanContent.slice(0, 500),
@@ -268,6 +280,7 @@ function parseM365Feed(jsonText) {
                 : updated.toISOString(),
             resolved: null,
             affectedServices: [svc.ServiceDisplayName],
+            regions: ['global'],
             updates: message ? [{
                 timestamp: updated.toISOString(),
                 message,
@@ -283,7 +296,7 @@ function parseM365Feed(jsonText) {
 /**
  * Build a 14-day daily status array from incidents
  */
-function computeDailyStatus(incidents) {
+export function computeDailyStatus(incidents) {
     const days = [];
     const now = new Date();
 
@@ -323,7 +336,7 @@ function computeDailyStatus(incidents) {
 /**
  * Compute overall status from daily status
  */
-function computeOverallStatus(dailyStatus, incidents) {
+export function computeOverallStatus(dailyStatus, incidents) {
     // Check active (unresolved) incidents first
     const activeIncidents = incidents.filter(inc => inc.status !== 'resolved');
     if (activeIncidents.some(inc => inc.severity === 'major')) return 'outage';

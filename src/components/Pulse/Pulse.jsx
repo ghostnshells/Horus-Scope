@@ -13,11 +13,16 @@ const Pulse = ({ userCloudRegions }) => {
     const [error, setError] = useState(null);
     const intervalRef = useRef(null);
 
+    // Resolve regions: undefined = still loading, null = no prefs (pass null to API), object = user prefs
+    const regionsResolved = userCloudRegions !== undefined;
+    const regionsToSend = userCloudRegions || null;
+
     const loadData = useCallback(async (forceRefresh = false) => {
+        if (!regionsResolved) return;
         setIsLoading(true);
         setError(null);
         try {
-            const result = await fetchCloudStatus(forceRefresh, userCloudRegions);
+            const result = await fetchCloudStatus(forceRefresh, regionsToSend);
             setData(result);
         } catch (err) {
             console.error('[Pulse] Fetch error:', err);
@@ -25,9 +30,9 @@ const Pulse = ({ userCloudRegions }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [userCloudRegions]);
+    }, [regionsResolved, regionsToSend]);
 
-    // Initial fetch
+    // Initial fetch (waits until regions are resolved)
     useEffect(() => {
         loadData();
     }, [loadData]);

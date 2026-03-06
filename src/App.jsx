@@ -57,7 +57,7 @@ function App() {
 
     // User asset customization
     const [userAssets, setUserAssets] = useState(null); // null = show all, array = filtered
-    const [userCloudRegions, setUserCloudRegions] = useState(null); // null = use defaults
+    const [userCloudRegions, setUserCloudRegions] = useState(undefined); // undefined = not loaded, null = no prefs
 
     // Verification banner
     const [showVerificationBanner, setShowVerificationBanner] = useState(true);
@@ -101,7 +101,7 @@ function App() {
                 .catch(() => setUserCloudRegions(null));
         } else {
             setUserAssets(null);
-            setUserCloudRegions(null);
+            setUserCloudRegions(null); // null = not logged in, no filtering
         }
     }, [isLoggedIn]);
 

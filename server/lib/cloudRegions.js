@@ -82,18 +82,41 @@ export function getDefaultRegions() {
     return defaults;
 }
 
+// Regex patterns to detect region codes in text even if not in our predefined list
+const REGION_CODE_PATTERNS = {
+    aws: /\b([a-z]{2}-(?:north|south|east|west|central|northeast|southeast|northwest|southwest)\w*-\d)\b/gi,
+    gcp: /\b((?:us|europe|asia|australia|southamerica|northamerica|me)-\w+-?\w*\d)\b/gi,
+    azure: /\b(east\s*us\s*\d?|west\s*us\s*\d?|central\s*us|north\s*(?:central\s*us|europe)|south\s*(?:central\s*us|east\s*asia)|west\s*europe|uk\s*south|japan\s*east|australia\s*east|brazil\s*south|east\s*asia|southeast\s*asia|canada\s*central)\b/gi,
+};
+
 /**
- * Match text against all regions for a provider, return matched region IDs
+ * Match text against all regions for a provider, return matched region IDs.
+ * Also detects region codes not in our predefined list so they don't get tagged as 'global'.
  */
 export function matchRegions(provider, text) {
     const config = CLOUD_REGIONS[provider];
     if (!config || !text) return [];
     const lower = text.toLowerCase();
-    const matched = [];
+    const matched = new Set();
+
+    // Match against our predefined regions
     for (const region of config.regions) {
         if (region.patterns.some(p => lower.includes(p))) {
-            matched.push(region.id);
+            matched.add(region.id);
         }
     }
-    return matched;
+
+    // Also scan for region-code-like patterns to catch regions not in our list
+    // (e.g., me-central-1, af-south-1). These get added as raw IDs so they
+    // won't match a user's selected regions and thus get filtered out properly.
+    const codePattern = REGION_CODE_PATTERNS[provider];
+    if (codePattern) {
+        let m;
+        codePattern.lastIndex = 0;
+        while ((m = codePattern.exec(lower)) !== null) {
+            matched.add(m[1].replace(/\s+/g, ''));
+        }
+    }
+
+    return Array.from(matched);
 }

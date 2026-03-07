@@ -1,4 +1,4 @@
-Heimdall Feature Roadmap
+Horus Scope Feature Roadmap
 ========================
 
 Current Feature Set
@@ -18,7 +18,7 @@ Tier 1 — Core Differentiators (build these first)
 A daily/weekly auto-generated briefing combining vuln data + news + cloud incidents into one actionable
 summary. Security teams spend 30-60 min every morning doing this manually. Show "X new criticals
 affecting your stack, Y cloud incidents, Z trending exploits." This is the feature that makes people
-open Heimdall every day.
+open Horus Scope every day.
 
 2. Custom Asset Watchlists
 --------------------------
@@ -47,7 +47,7 @@ Tier 2 — Competitive Moat Features
 -------------------------------------------------------------
 Wire up StatusBadge, SLAIndicator, AuditTrail fully. Let authenticated users mark CVEs as:
 New → Investigating → Mitigated → Accepted Risk → Resolved. Add SLA timers (e.g., "Critical: 48hr
-remediation"). Export audit trail for compliance. This turns Heimdall from a read-only dashboard into
+remediation"). Export audit trail for compliance. This turns Horus Scope from a read-only dashboard into
 a workflow tool teams rely on daily.
 
 6. Compliance Mapping
@@ -83,12 +83,12 @@ Multiple users in one org. Shared watchlists, shared vuln statuses, role-based a
 10. Reporting & Export
 ----------------------
 PDF/CSV export of: weekly vuln summary, asset risk posture, SLA compliance, remediation velocity.
-Scheduled email reports. Security teams need to report to management monthly. If Heimdall generates
+Scheduled email reports. Security teams need to report to management monthly. If Horus Scope generates
 that report, it's indispensable.
 
 11. API Access
 --------------
-REST API for integrations. Let teams pull Heimdall data into their SIEM, ticketing systems
+REST API for integrations. Let teams pull Horus Scope data into their SIEM, ticketing systems
 (Jira/ServiceNow), or runbooks. API access is a classic premium tier gate.
 
 12. Vendor Advisory Aggregation
@@ -131,7 +131,7 @@ Recommended Build Sequence
 2. EPSS overlay — quick win, free data source (FIRST.org), massive value-add
 3. Alerting — converts users from "checks occasionally" to "depends on daily"
 4. Finish lifecycle management — components already exist, just needs wiring
-5. Threat intel digest — the "daily briefing" that makes Heimdall the first tab opened
+5. Threat intel digest — the "daily briefing" that makes Horus Scope the first tab opened
 
 The free tier with the fixed 26 assets + Pulse acts as the funnel.
 Customization and workflow are what people pay for.

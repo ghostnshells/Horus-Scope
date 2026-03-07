@@ -1,5 +1,5 @@
 ================================================================================
-HEIMDALL SECURITY ASSESSMENT REPORT
+HORUS SCOPE SECURITY ASSESSMENT REPORT
 Date: 6 March 2026
 ================================================================================
 
@@ -54,11 +54,11 @@ Type:       Authentication Bypass
 
 Description:
 If JWT_SECRET environment variable is unset, the application falls back to a
-hardcoded string 'heimdall-dev-secret-change-me'. Anyone who knows this default
+hardcoded string 'horus-scope-dev-secret-change-me'. Anyone who knows this default
 can forge valid JWT tokens for any user.
 
 Code:
-    const JWT_SECRET = process.env.JWT_SECRET || 'heimdall-dev-secret-change-me';
+    const JWT_SECRET = process.env.JWT_SECRET || 'horus-scope-dev-secret-change-me';
 
 Impact:
 Complete authentication bypass - attacker can generate tokens for any user

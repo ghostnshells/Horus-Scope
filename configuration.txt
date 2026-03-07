@@ -1,5 +1,5 @@
 ================================================================================
-HEIMDALL - CONFIGURATION & ARCHITECTURE GUIDE
+HORUS SCOPE - CONFIGURATION & ARCHITECTURE GUIDE
 ================================================================================
 
 TABLE OF CONTENTS
@@ -22,7 +22,7 @@ TABLE OF CONTENTS
 1. APPLICATION OVERVIEW
 ================================================================================
 
-Heimdall is a cybersecurity vulnerability monitoring dashboard. It aggregates
+Horus Scope is a cybersecurity vulnerability monitoring dashboard. It aggregates
 vulnerability data from the National Vulnerability Database (NVD) and CISA's
 Known Exploited Vulnerabilities (KEV) catalog for 19 monitored assets (Cisco,
 Microsoft, HPE, WatchGuard, etc.).
@@ -141,7 +141,7 @@ Upstash is a serverless Redis provider. It exposes a REST API, so it works in
 Vercel's serverless environment (no persistent TCP connections needed).
 
 Free tier limits: 10,000 commands/day, 256 MB storage.
-Heimdall's usage: ~200-300 commands/day (well within limits).
+Horus Scope's usage: ~200-300 commands/day (well within limits).
 
 Redis key structure:
 
@@ -238,7 +238,7 @@ Non-VITE_ variables are only available to serverless functions at runtime.
 8. DATA FLOW - HOW A USER REQUEST WORKS
 ================================================================================
 
-Step-by-step when a user opens Heimdall in their browser:
+Step-by-step when a user opens Horus Scope in their browser:
 
 1. Browser loads the React SPA from Vercel's CDN (static HTML/JS/CSS)
 
@@ -333,7 +333,7 @@ the rate limits are never hit during normal operation.
 11. FILE STRUCTURE
 ================================================================================
 
-/heimdall
+/horus-scope
 ├── api/                              # Vercel Serverless Functions
 │   ├── vulnerabilities.js            # GET endpoint - serves cached data
 │   ├── cron/
@@ -386,7 +386,7 @@ Prerequisites:
 Step 1: Create Upstash Redis Database
   - Go to console.upstash.com
   - Click "Create Database"
-  - Name: heimdall-cache (or anything)
+  - Name: horus-scope-cache (or anything)
   - Region: US-East-1 (match your Vercel region)
   - Type: Regional
   - Copy the REST URL and REST Token from the database details page
@@ -449,7 +449,7 @@ Frontend falls back to direct API calls (slow loading):
 
 Redis out of memory or command limit:
   - Free tier: 10K commands/day, 256 MB
-  - Heimdall uses ~200-300 commands/day and <10 MB storage
+  - Horus Scope uses ~200-300 commands/day and <10 MB storage
   - If you hit limits, check for runaway cron invocations
 
 ================================================================================

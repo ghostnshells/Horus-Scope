@@ -3,7 +3,7 @@
 
 services:
   - type: web
-    name: heimdall-api
+    name: horus-scope-api
     env: node
     plan: free
     buildCommand: npm install

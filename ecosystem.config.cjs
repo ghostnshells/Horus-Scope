@@ -1,6 +1,6 @@
 module.exports = {
   apps: [{
-    name: 'heimdall',
+    name: 'horus-scope',
     script: 'server/index.js',
     instances: 1,
     autorestart: true,

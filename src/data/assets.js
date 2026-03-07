@@ -1,4 +1,4 @@
-// Asset definitions for Heimdall Vulnerability Monitor
+// Asset definitions for Horus Scope Vulnerability Monitor
 // Each asset represents a vendor or product to monitor for vulnerabilities
 // Consolidated structure: One card per major vendor (Cisco, Microsoft, HPE) with sub-products
 

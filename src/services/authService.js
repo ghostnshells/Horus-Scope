@@ -2,9 +2,9 @@
 // Handles token storage, auto-refresh, and authenticated API calls
 
 const AUTH_API = '/api/auth';
-const TOKEN_KEY = 'heimdall_access_token';
-const REFRESH_KEY = 'heimdall_refresh_token';
-const USER_KEY = 'heimdall_user';
+const TOKEN_KEY = 'horus_scope_access_token';
+const REFRESH_KEY = 'horus_scope_refresh_token';
+const USER_KEY = 'horus_scope_user';
 
 /**
  * Get stored access token

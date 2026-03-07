@@ -9,7 +9,7 @@ if [ -z "$1" ]; then
 fi
 
 CRON_SECRET="$1"
-URL="https://heimdall-nine-alpha.vercel.app/api/cron/refresh"
+URL="https://horus-scope.vercel.app/api/cron/refresh"
 
 echo "Testing cron endpoint..."
 echo "URL: $URL"

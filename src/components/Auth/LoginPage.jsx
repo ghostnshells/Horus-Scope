@@ -42,7 +42,7 @@ const LoginPage = ({ onLogin, onForgotPassword }) => {
                     <div className="login-logo">
                         <Shield size={32} />
                     </div>
-                    <h1 className="login-title">HEIMDALL</h1>
+                    <h1 className="login-title">HORUS SCOPE</h1>
                     <p className="login-subtitle">Vulnerability Monitoring Dashboard</p>
                 </div>
 

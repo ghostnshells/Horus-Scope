@@ -52,7 +52,7 @@ async function fetchFeed(url, timeoutMs = 10000) {
     try {
         const res = await fetch(url, {
             signal: controller.signal,
-            headers: { 'User-Agent': 'Heimdall/1.0' },
+            headers: { 'User-Agent': 'HorusScope/1.0' },
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const text = await res.text();

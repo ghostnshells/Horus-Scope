@@ -1,8 +1,8 @@
-# Heimdall SaaS Transformation Plan
+# Horus Scope SaaS Transformation Plan
 
 ## Context
 
-Heimdall is a vulnerability monitoring dashboard (React + Express) with 24 hardcoded assets cached globally. It needs to:
+Horus Scope is a vulnerability monitoring dashboard (React + Express) with 24 hardcoded assets cached globally. It needs to:
 1. Fix performance gaps (missing cache ranges, no compression, no HTTP caching)
 2. Add user authentication with email verification
 3. Let users configure which assets they monitor from a large curated catalog
@@ -53,7 +53,7 @@ APP_URL=https://yourdomain.com
 ```
 
 ### 2.1 SQLite database — `server/db/database.js`
-- Create/connect to `server/db/heimdall.db`
+- Create/connect to `server/db/horus-scope.db`
 - Enable WAL mode for concurrent reads under PM2 clustering
 - Schema:
   - `users` — id, email, password_hash, display_name, email_verified, verification_token, verification_expires, reset_token, reset_token_expires, created_at, updated_at

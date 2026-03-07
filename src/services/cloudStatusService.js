@@ -1,7 +1,7 @@
 // Cloud Status Frontend Service
 // Fetches /api/cloud-status with memory + localStorage caching (3-min TTL)
 
-const CACHE_KEY_PREFIX = 'heimdall_cloud_status_v2';
+const CACHE_KEY_PREFIX = 'horus_scope_cloud_status_v2';
 const CACHE_DURATION = 3 * 60 * 1000; // 3 minutes
 
 const API_URL = import.meta.env.VITE_API_URL

@@ -1,5 +1,5 @@
 
-HEIMDALL - FEATURE UPDATE CANDIDATES
+HORUS SCOPE - FEATURE UPDATE CANDIDATES
 =====================================
 (Status: Approved for Implementation)
 

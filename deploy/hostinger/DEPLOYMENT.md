@@ -1,4 +1,4 @@
-# Heimdall - Hostinger VPS Deployment Guide
+# Horus Scope - Hostinger VPS Deployment Guide
 
 ## Prerequisites
 
@@ -30,8 +30,8 @@ npm install -g pm2
 
 ```bash
 cd /var/www
-git clone <your-repo-url> heimdall
-cd heimdall
+git clone <your-repo-url> horus-scope
+cd horus-scope
 npm install
 ```
 
@@ -76,7 +76,7 @@ Install Nginx if not present:
 apt-get install -y nginx
 ```
 
-Create `/etc/nginx/sites-available/heimdall`:
+Create `/etc/nginx/sites-available/horus-scope`:
 
 ```nginx
 server {
@@ -100,7 +100,7 @@ server {
 Enable the site:
 
 ```bash
-ln -s /etc/nginx/sites-available/heimdall /etc/nginx/sites-enabled/
+ln -s /etc/nginx/sites-available/horus-scope /etc/nginx/sites-enabled/
 nginx -t
 systemctl restart nginx
 ```
@@ -128,25 +128,25 @@ CORS_ORIGIN=https://yourdomain.com
 
 ```bash
 pm2 status              # Check app status
-pm2 logs heimdall       # View live logs
-pm2 restart heimdall    # Restart the app
-pm2 stop heimdall       # Stop the app
+pm2 logs horus-scope       # View live logs
+pm2 restart horus-scope    # Restart the app
+pm2 stop horus-scope       # Stop the app
 pm2 monit               # Real-time monitoring
 ```
 
 ## Updating the Application
 
 ```bash
-cd /var/www/heimdall
+cd /var/www/horus-scope
 git pull
 npm install
 npm run build
-pm2 restart heimdall
+pm2 restart horus-scope
 ```
 
 ## Troubleshooting
 
-- **502 Bad Gateway**: Check `pm2 logs heimdall` — the Node process may have crashed
+- **502 Bad Gateway**: Check `pm2 logs horus-scope` — the Node process may have crashed
 - **Assets not loading**: Ensure `npm run build` completed and `dist/` directory exists
 - **No vulnerability data**: Check NVD_API_KEY is set; first fetch takes a few minutes
 - **Port conflicts**: Change PORT in `.env` if 3001 is in use

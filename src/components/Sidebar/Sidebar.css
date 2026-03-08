@@ -77,7 +77,10 @@
 }
 
 .sidebar-logo-text span {
-    color: #37a8a8;
+    background: linear-gradient(135deg, #00d4ff, #3a8bff, #6a00ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 
 .sidebar-content {

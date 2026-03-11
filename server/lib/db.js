@@ -7,7 +7,7 @@ const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.DATABASE_URL?.includes('localhost')
         ? false
-        : { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === 'false' && process.env.NODE_ENV !== 'production' ? false : true },
+        : { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === 'false' ? false : true },
     max: 10,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,

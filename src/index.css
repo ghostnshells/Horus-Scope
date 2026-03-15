@@ -446,8 +446,10 @@ a:hover {
   max-width: 50px;
 }
 
-/* Adjust dashboard to work within new layout */
-.main-content .dashboard {
+/* Adjust views to fill available space within main-content */
+.main-content .dashboard,
+.main-content .killchain,
+.main-content .pulse {
   margin-left: 0;
   flex: 1;
   min-width: 0;

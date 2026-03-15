@@ -593,20 +593,23 @@ app.get('/api/auth/oauth/:provider/callback', async (req, res) => {
     const provider = req.params.provider;
     const { code, state, error: oauthError } = req.query;
 
-    // Send the OAuth result back to the main window via localStorage
-    // This is more reliable than postMessage since window.opener is often
-    // stripped by browsers during cross-origin redirect chains
+    // Send the OAuth result back to the main window via localStorage.
+    // A per-request nonce allows the inline script past the CSP policy.
     const sendResult = (params) => {
+        const nonce = crypto.randomBytes(16).toString('base64');
         const payload = JSON.stringify(params);
+        res.setHeader(
+            'Content-Security-Policy',
+            `default-src 'self'; script-src 'nonce-${nonce}'`
+        );
         res.send(`
             <!DOCTYPE html>
             <html><head><title>Authenticating...</title></head>
-            <body><script>
+            <body><script nonce="${nonce}">
                 try {
                     localStorage.setItem('panoptes_oauth_result', ${JSON.stringify(payload)});
                 } catch(e) {}
                 window.close();
-                // If window.close() doesn't work (common), redirect to app
                 setTimeout(function() { window.location.href = '/'; }, 500);
             </script><p>Signing you in...</p></body></html>
         `);
